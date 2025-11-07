@@ -1,7 +1,18 @@
-import { MessageCircle, Users, Plus, ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { MessageCircle, Users, Plus, ArrowRight, Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 const groups = [
   {
@@ -32,26 +43,100 @@ const groups = [
 
 const Group = () => {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const filteredGroups = groups.filter(group =>
+    group.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleCreateGroup = () => {
+    if (newGroupName.trim()) {
+      // TODO: 实际创建群聊的逻辑
+      console.log("创建群聊:", newGroupName);
+      setNewGroupName("");
+      setIsDialogOpen(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 pb-20">
       {/* Header */}
       <header className="sticky top-0 z-10 glass-effect px-4 py-4 shadow-soft">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold">群聊空间</h1>
-          <Button
-            size="icon"
-            className="rounded-xl gradient-primary shadow-soft hover:shadow-elevated transition-all duration-300"
-          >
-            <Plus className="w-5 h-5" />
-          </Button>
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold">群聊空间</h1>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  size="icon"
+                  className="rounded-xl gradient-primary shadow-soft hover:shadow-elevated transition-all duration-300"
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>创建新群聊</DialogTitle>
+                  <DialogDescription>
+                    创建一个新的群聊空间，邀请朋友加入
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="group-name">群聊名称</Label>
+                    <Input
+                      id="group-name"
+                      placeholder="输入群聊名称..."
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleCreateGroup}
+                      className="flex-1 rounded-xl gradient-primary"
+                      disabled={!newGroupName.trim()}
+                    >
+                      创建群聊
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => setIsDialogOpen(false)}
+                    >
+                      取消
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="搜索群聊..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 rounded-xl bg-background/50 border-border"
+            />
+          </div>
         </div>
       </header>
 
       {/* Groups List */}
       <main className="px-4 py-6">
         <div className="max-w-lg mx-auto space-y-3 animate-fade-in">
-          {groups.map((group, index) => (
+          {filteredGroups.length === 0 ? (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground">没有找到匹配的群聊</p>
+            </Card>
+          ) : (
+            filteredGroups.map((group, index) => (
             <Card
               key={group.id}
               onClick={() => navigate(`/group/${group.id}`)}
@@ -96,7 +181,8 @@ const Group = () => {
                 </div>
               </div>
             </Card>
-          ))}
+            ))
+          )}
         </div>
 
         {/* AI Assistant Card */}
