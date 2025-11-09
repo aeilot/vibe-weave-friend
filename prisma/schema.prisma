@@ -12,14 +12,19 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(uuid())
+  clerkId           String?  @unique
+  name              String
+  email             String?  @unique
+  conversationCount Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
   
   conversations Conversation[]
   messages      Message[]
+  groupMembers  GroupMember[]
+  
+  @@index([clerkId])
 }
 
 model Conversation {
@@ -70,4 +75,48 @@ model Memory {
   
   @@index([userId])
   @@index([category])
+}
+
+model Group {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?  @db.Text
+  creatorId       String?
+  lastMessageAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  members         GroupMember[]
+  messages        GroupMessage[]
+  
+  @@index([creatorId])
+  @@index([lastMessageAt])
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  role      String   @default("member") // "admin", "member"
+  joinedAt  DateTime @default(now())
+  
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+}
+
+model GroupMessage {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  
+  @@index([groupId])
+  @@index([createdAt])
 }

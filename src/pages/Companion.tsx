@@ -1,21 +1,28 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Sparkles, Mic, Settings, Smile, TrendingUp, Heart } from "lucide-react";
+import { Send, Sparkles, Mic, Settings, Smile, TrendingUp, Heart, Brain, Eye, EyeOff, Lightbulb, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import {
-  generateAIResponse,
-  generateSessionSummary,
-  decidePersonalityUpdate,
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  generateAIResponse, 
+  generateSessionSummary, 
+  decidePersonalityUpdate, 
   getDefaultPersonality,
-  type Message as AIMessage
+  generatePersonalitySuggestions,
+  type Message as AIMessage,
+  type PersonalityConfig
 } from "@/ai";
 import { db } from "@/lib/db";
 import { useToast } from "@/hooks/use-toast";
 import { backgroundTasks } from "@/lib/backgroundTasks";
+import { useAuth } from "@/hooks/use-auth";
+import { LoginDialog } from "@/components/LoginDialog";
 
 interface Message {
   id: string;
@@ -44,12 +51,17 @@ const aiMoods = [
 
 const Companion = () => {
   const { toast } = useToast();
+  const { isSignedIn } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [currentMood, setCurrentMood] = useState(0);
   const [showQuickReplies, setShowQuickReplies] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const [isPersonalityDialogOpen, setIsPersonalityDialogOpen] = useState(false);
+  const [personalitySuggestions, setPersonalitySuggestions] = useState<{ suggestions: string[]; explanation: string } | null>(null);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [emotionData, setEmotionData] = useState([
     { time: "8:00", score: 70 },
     { time: "12:00", score: 65 },
@@ -57,6 +69,14 @@ const Companion = () => {
     { time: "20:00", score: 80 },
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [personalityConfig, setPersonalityConfig] = useState<PersonalityConfig>(() => {
+    const saved = localStorage.getItem("personalityConfig");
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return getDefaultPersonality();
+  });
 
   // Load messages from database on mount
   useEffect(() => {
@@ -153,9 +173,82 @@ const Companion = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const handleSavePersonalityConfig = () => {
+    localStorage.setItem("personalityConfig", JSON.stringify(personalityConfig));
+    setIsPersonalityDialogOpen(false);
+    toast({
+      title: "个性设置已保存",
+      description: "AI 个性配置已更新",
+    });
+  };
+
+  const handleResetPersonality = () => {
+    const defaultPersonality = getDefaultPersonality();
+    setPersonalityConfig(defaultPersonality);
+    localStorage.setItem("personalityConfig", JSON.stringify(defaultPersonality));
+    toast({
+      title: "已重置",
+      description: "AI 个性已恢复为默认设置",
+    });
+  };
+
+  const handleGetPersonalitySuggestions = async () => {
+    setIsLoadingSuggestions(true);
+    try {
+      const conversation = await db.getCurrentConversation();
+      const dbMessages = await db.getConversationMessages(conversation.id);
+      
+      if (dbMessages.length < 5) {
+        toast({
+          title: "对话太少",
+          description: "请先与 AI 进行至少 5 次对话，以便生成个性化建议",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const aiMessages: AIMessage[] = dbMessages.map(m => ({
+        role: m.sender === "user" ? "user" : "assistant",
+        content: m.content,
+      }));
+      
+      const suggestions = await generatePersonalitySuggestions(
+        aiMessages,
+        personalityConfig
+      );
+      
+      setPersonalitySuggestions(suggestions);
+      
+      toast({
+        title: "建议已生成",
+        description: "AI 已根据你的对话历史生成个性优化建议",
+      });
+    } catch (error) {
+      console.error("Failed to generate personality suggestions:", error);
+      toast({
+        title: "生成失败",
+        description: error instanceof Error ? error.message : "无法生成建议",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  };
+
   const handleSend = async (content?: string) => {
     const messageContent = content || inputValue;
     if (!messageContent.trim()) return;
+
+    // Check if user is signed in, if not show login dialog
+    if (!isSignedIn) {
+      setShowLoginDialog(true);
+      toast({
+        title: "请先登录",
+        description: "登录后可以保存对话记录并使用更多功能",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setInputValue("");
     setShowQuickReplies(false);
@@ -445,8 +538,13 @@ const Companion = () => {
                 </div>
               </SheetContent>
             </Sheet>
-
-            <Button variant="ghost" size="icon" className="rounded-xl">
+            
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="rounded-xl"
+              onClick={() => setIsPersonalityDialogOpen(true)}
+            >
               <Settings className="w-5 h-5" />
             </Button>
           </div>
@@ -582,6 +680,146 @@ const Companion = () => {
           </Button>
         </div>
       </div>
+
+      {/* Login Dialog */}
+      <LoginDialog open={showLoginDialog} onOpenChange={setShowLoginDialog} />
+
+      {/* Personality Settings Dialog */}
+      <Dialog open={isPersonalityDialogOpen} onOpenChange={setIsPersonalityDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-500" />
+              AI 个性设置
+            </DialogTitle>
+            <DialogDescription>
+              配置 AI 助手的名称、特质和系统提示词，打造专属于你的 AI 伴侣
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="personalityName">AI 名称</Label>
+              <Input
+                id="personalityName"
+                value={personalityConfig.name}
+                onChange={(e) => setPersonalityConfig(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Soul"
+              />
+              <p className="text-xs text-muted-foreground">给你的 AI 助手起一个名字</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="personalityTraits">个性特质</Label>
+              <Input
+                id="personalityTraits"
+                value={personalityConfig.traits.join(", ")}
+                onChange={(e) => setPersonalityConfig(prev => ({ 
+                  ...prev, 
+                  traits: e.target.value.split(",").map(t => t.trim()).filter(t => t) 
+                }))}
+                placeholder="关怀, 倾听, 陪伴, 理解, 温暖"
+              />
+              <p className="text-xs text-muted-foreground">用逗号分隔多个特质</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="systemPrompt">系统提示词</Label>
+              <Textarea
+                id="systemPrompt"
+                value={personalityConfig.systemPrompt}
+                onChange={(e) => setPersonalityConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
+                placeholder="你是一个温暖、善解人意的AI伴侣助手..."
+                rows={12}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                定义 AI 的行为方式、语气和对话风格。支持 Markdown 格式。
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <div className="flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-primary mt-0.5" />
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">提示词编写建议：</p>
+                  <ul className="list-disc list-inside space-y-0.5 ml-2">
+                    <li>明确定义 AI 的角色和身份</li>
+                    <li>说明 AI 应该如何回复（语气、风格、长度）</li>
+                    <li>列出 AI 的主要特质和行为准则</li>
+                    <li>指定特殊要求（如使用表情符号、记住信息等）</li>
+                    <li>AI 会根据对话自动适应，但这是基础个性</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Personality Suggestions */}
+            <div className="rounded-lg border border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-pink-500/5 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4 text-purple-500" />
+                  <p className="font-semibold text-sm">AI 优化建议</p>
+                  <Badge variant="secondary" className="text-xs">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    AI
+                  </Badge>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGetPersonalitySuggestions}
+                  disabled={isLoadingSuggestions}
+                  className="h-7"
+                >
+                  {isLoadingSuggestions ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      分析中
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      获取建议
+                    </>
+                  )}
+                </Button>
+              </div>
+              {personalitySuggestions ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {personalitySuggestions.explanation}
+                  </p>
+                  <ul className="space-y-1">
+                    {personalitySuggestions.suggestions.map((suggestion, index) => (
+                      <li key={index} className="text-xs text-foreground flex items-start gap-2">
+                        <span className="text-purple-500 font-bold">{index + 1}.</span>
+                        <span>{suggestion}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  点击"获取建议"让 AI 根据你的对话历史分析并提供个性优化建议
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-between gap-3">
+            <Button variant="outline" onClick={handleResetPersonality}>
+              重置为默认
+            </Button>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setIsPersonalityDialogOpen(false)}>
+                取消
+              </Button>
+              <Button onClick={handleSavePersonalityConfig}>
+                保存配置
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

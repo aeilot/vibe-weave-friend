@@ -260,6 +260,27 @@ const Archive = () => {
     setIsEditingDiary(true);
   };
 
+  const handleSaveDiary = () => {
+    if (selectedDiary) {
+      // Update the diary entry with edited content
+      setDiaries(prev => prev.map(diary => 
+        diary.id === selectedDiary.id 
+          ? { ...diary, content: editedContent }
+          : diary
+      ));
+      
+      // TODO: Save to database when backend is implemented
+      
+      setIsEditingDiary(false);
+      setSelectedDiary(null);
+      
+      toast({
+        title: "已保存",
+        description: "日记内容已更新",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 pb-20">
       {/* Header */}
@@ -409,14 +430,17 @@ const Archive = () => {
                         {isEditingDiary && selectedDiary?.id === entry.id ? (
                           <>
                             <Button
-                              onClick={() => setIsEditingDiary(false)}
+                              onClick={handleSaveDiary}
                               className="flex-1 rounded-xl gradient-primary"
                             >
                               保存
                             </Button>
                             <Button
                               variant="outline"
-                              onClick={() => setIsEditingDiary(false)}
+                              onClick={() => {
+                                setIsEditingDiary(false);
+                                setSelectedDiary(null);
+                              }}
                               className="rounded-xl"
                             >
                               取消

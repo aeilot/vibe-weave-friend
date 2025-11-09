@@ -16,10 +16,13 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { generateGroupTopicSuggestions } from "@/ai";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
+import { LoginDialog } from "@/components/LoginDialog";
+import { db, type Group as GroupType } from "@/lib/db";
 
-const groups = [
+const staticGroups = [
   {
-    id: 1,
+    id: "static-1",
     name: "工作小组",
     members: 5,
     lastMessage: "下周一开会讨论项目进度",
@@ -27,7 +30,7 @@ const groups = [
     unread: 2,
   },
   {
-    id: 2,
+    id: "static-2",
     name: "朋友聚会",
     members: 8,
     lastMessage: "周末去爬山吗？",
@@ -35,7 +38,7 @@ const groups = [
     unread: 0,
   },
   {
-    id: 3,
+    id: "static-3",
     name: "学习小组",
     members: 12,
     lastMessage: "今天的作业都完成了吗",
@@ -47,22 +50,76 @@ const groups = [
 const Group = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, isSignedIn } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDesc, setNewGroupDesc] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<typeof groups[0] | null>(null);
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<GroupType | typeof staticGroups[0] | null>(null);
   const [topicSuggestions, setTopicSuggestions] = useState<string[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [userGroups, setUserGroups] = useState<GroupType[]>([]);
 
-  const filteredGroups = groups.filter(group =>
+  // Load user's groups
+  useEffect(() => {
+    const loadGroups = async () => {
+      if (isSignedIn && user) {
+        const groups = await db.getUserGroups(user.id);
+        setUserGroups(groups);
+      }
+    };
+    loadGroups();
+  }, [isSignedIn, user]);
+
+  // Use real groups if signed in, otherwise use static groups
+  const displayGroups = isSignedIn ? userGroups : staticGroups.map(g => ({
+    id: g.id,
+    name: g.name,
+    description: g.lastMessage,
+    creatorId: undefined,
+    lastMessageAt: undefined,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+
+  const filteredGroups = displayGroups.filter(group =>
     group.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
+    if (!isSignedIn) {
+      setShowLoginDialog(true);
+      toast({
+        title: "请先登录",
+        description: "登录后可以创建群聊",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (newGroupName.trim()) {
-      // TODO: 实际创建群聊的逻辑
-      console.log("创建群聊:", newGroupName);
+      const group = await db.createGroup({
+        name: newGroupName,
+        description: newGroupDesc,
+        creatorId: user?.id,
+      });
+
+      // Add creator as admin
+      if (user) {
+        await db.addGroupMember({
+          groupId: group.id,
+          userId: user.id,
+          role: "admin",
+        });
+      }
+
+      // Reload groups
+      const groups = await db.getUserGroups(user!.id);
+      setUserGroups(groups);
+
       setNewGroupName("");
+      setNewGroupDesc("");
       setIsDialogOpen(false);
       toast({
         title: "群聊已创建",
@@ -120,6 +177,16 @@ const Group = () => {
                       placeholder="输入群聊名称..."
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="group-desc">群聊简介（可选）</Label>
+                    <Input
+                      id="group-desc"
+                      placeholder="输入群聊简介..."
+                      value={newGroupDesc}
+                      onChange={(e) => setNewGroupDesc(e.target.value)}
                       className="rounded-xl"
                     />
                   </div>
@@ -208,15 +275,26 @@ const Group = () => {
               <div className="flex items-center gap-4">
                 <div 
                   className="relative cursor-pointer"
-                  onClick={() => navigate(`/group/${group.id}`)}
+                  onClick={() => {
+                    if (!isSignedIn) {
+                      setShowLoginDialog(true);
+                      toast({
+                        title: "请先登录",
+                        description: "登录后可以查看群聊详情",
+                        variant: "destructive",
+                      });
+                    } else {
+                      navigate(`/group/${group.id}`);
+                    }
+                  }}
                 >
                   <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
                     <Users className="w-7 h-7 text-primary" />
                   </div>
-                  {group.unread > 0 && (
+                  {!isSignedIn && (staticGroups.find(g => g.id === group.id)?.unread || 0) > 0 && (
                     <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive flex items-center justify-center">
                       <span className="text-xs text-white font-semibold">
-                        {group.unread}
+                        {staticGroups.find(g => g.id === group.id)?.unread}
                       </span>
                     </div>
                   )}
@@ -224,13 +302,24 @@ const Group = () => {
                 
                 <div 
                   className="flex-1 min-w-0 cursor-pointer"
-                  onClick={() => navigate(`/group/${group.id}`)}
+                  onClick={() => {
+                    if (!isSignedIn) {
+                      setShowLoginDialog(true);
+                      toast({
+                        title: "请先登录",
+                        description: "登录后可以查看群聊详情",
+                        variant: "destructive",
+                      });
+                    } else {
+                      navigate(`/group/${group.id}`);
+                    }
+                  }}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="font-semibold truncate">{group.name}</h3>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">
-                        {group.time}
+                        {!isSignedIn ? staticGroups.find(g => g.id === group.id)?.time : ""}
                       </span>
                       <ArrowRight className="w-4 h-4 text-muted-foreground" />
                     </div>
@@ -239,12 +328,12 @@ const Group = () => {
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-3 h-3 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">
-                      {group.members} 人
+                      {!isSignedIn ? (staticGroups.find(g => g.id === group.id)?.members || 0) : 0} 人
                     </span>
                   </div>
                   
                   <p className="text-sm text-muted-foreground truncate">
-                    {group.lastMessage}
+                    {group.description || (!isSignedIn ? staticGroups.find(g => g.id === group.id)?.lastMessage : "")}
                   </p>
                 </div>
 
@@ -289,6 +378,9 @@ const Group = () => {
           </Card>
         </div>
       </main>
+
+      {/* Login Dialog */}
+      <LoginDialog open={showLoginDialog} onOpenChange={setShowLoginDialog} />
     </div>
   );
 };

@@ -7,8 +7,10 @@
 
 export interface User {
   id: string;
+  clerkId?: string;
   name: string;
   email?: string;
+  conversationCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +49,32 @@ export interface Memory {
   updatedAt: Date;
 }
 
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  creatorId?: string;
+  lastMessageAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GroupMember {
+  id: string;
+  groupId: string;
+  userId: string;
+  role: string; // "admin" or "member"
+  joinedAt: Date;
+}
+
+export interface GroupMessage {
+  id: string;
+  groupId: string;
+  userId: string;
+  content: string;
+  createdAt: Date;
+}
+
 class DatabaseService {
   private getFromStorage<T>(key: string): T[] {
     const data = localStorage.getItem(key);
@@ -62,18 +90,39 @@ class DatabaseService {
   }
 
   // User operations
-  async createUser(data: { name: string; email?: string }): Promise<User> {
+  async createUser(data: { name: string; email?: string; clerkId?: string }): Promise<User> {
     const users = this.getFromStorage<User>("users");
     const user: User = {
       id: this.generateId(),
+      clerkId: data.clerkId,
       name: data.name,
       email: data.email,
+      conversationCount: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     users.push(user);
     this.saveToStorage("users", users);
     return user;
+  }
+
+  async getUserByClerkId(clerkId: string): Promise<User | null> {
+    const users = this.getFromStorage<User>("users");
+    return users.find(u => u.clerkId === clerkId) || null;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+    const users = this.getFromStorage<User>("users");
+    const index = users.findIndex(u => u.id === id);
+    if (index === -1) return null;
+    
+    users[index] = {
+      ...users[index],
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.saveToStorage("users", users);
+    return users[index];
   }
 
   async getUser(id: string): Promise<User | null> {
@@ -231,12 +280,147 @@ class DatabaseService {
     );
   }
 
+  // Group operations
+  async createGroup(data: {
+    name: string;
+    description?: string;
+    creatorId?: string;
+  }): Promise<Group> {
+    const groups = this.getFromStorage<Group>("groups");
+    const group: Group = {
+      id: this.generateId(),
+      name: data.name,
+      description: data.description,
+      creatorId: data.creatorId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    groups.push(group);
+    this.saveToStorage("groups", groups);
+    return group;
+  }
+
+  async getGroup(id: string): Promise<Group | null> {
+    const groups = this.getFromStorage<Group>("groups");
+    return groups.find(g => g.id === id) || null;
+  }
+
+  async updateGroup(id: string, updates: Partial<Group>): Promise<Group | null> {
+    const groups = this.getFromStorage<Group>("groups");
+    const index = groups.findIndex(g => g.id === id);
+    if (index === -1) return null;
+    
+    groups[index] = {
+      ...groups[index],
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.saveToStorage("groups", groups);
+    return groups[index];
+  }
+
+  async getUserGroups(userId: string): Promise<Group[]> {
+    const groupMembers = this.getFromStorage<GroupMember>("groupMembers");
+    const userGroupIds = groupMembers
+      .filter(m => m.userId === userId)
+      .map(m => m.groupId);
+    
+    const groups = this.getFromStorage<Group>("groups");
+    return groups.filter(g => userGroupIds.includes(g.id));
+  }
+
+  async deleteGroup(id: string): Promise<void> {
+    const groups = this.getFromStorage<Group>("groups");
+    this.saveToStorage("groups", groups.filter(g => g.id !== id));
+    
+    // Also delete group members and messages
+    const groupMembers = this.getFromStorage<GroupMember>("groupMembers");
+    this.saveToStorage("groupMembers", groupMembers.filter(m => m.groupId !== id));
+    
+    const groupMessages = this.getFromStorage<GroupMessage>("groupMessages");
+    this.saveToStorage("groupMessages", groupMessages.filter(m => m.groupId !== id));
+  }
+
+  // Group Member operations
+  async addGroupMember(data: {
+    groupId: string;
+    userId: string;
+    role?: string;
+  }): Promise<GroupMember> {
+    const groupMembers = this.getFromStorage<GroupMember>("groupMembers");
+    
+    // Check if already a member
+    const existing = groupMembers.find(
+      m => m.groupId === data.groupId && m.userId === data.userId
+    );
+    if (existing) return existing;
+    
+    const member: GroupMember = {
+      id: this.generateId(),
+      groupId: data.groupId,
+      userId: data.userId,
+      role: data.role || "member",
+      joinedAt: new Date(),
+    };
+    groupMembers.push(member);
+    this.saveToStorage("groupMembers", groupMembers);
+    return member;
+  }
+
+  async getGroupMembers(groupId: string): Promise<GroupMember[]> {
+    const groupMembers = this.getFromStorage<GroupMember>("groupMembers");
+    return groupMembers.filter(m => m.groupId === groupId);
+  }
+
+  async removeGroupMember(groupId: string, userId: string): Promise<void> {
+    const groupMembers = this.getFromStorage<GroupMember>("groupMembers");
+    this.saveToStorage(
+      "groupMembers",
+      groupMembers.filter(m => !(m.groupId === groupId && m.userId === userId))
+    );
+  }
+
+  // Group Message operations
+  async createGroupMessage(data: {
+    groupId: string;
+    userId: string;
+    content: string;
+  }): Promise<GroupMessage> {
+    const groupMessages = this.getFromStorage<GroupMessage>("groupMessages");
+    const message: GroupMessage = {
+      id: this.generateId(),
+      groupId: data.groupId,
+      userId: data.userId,
+      content: data.content,
+      createdAt: new Date(),
+    };
+    groupMessages.push(message);
+    this.saveToStorage("groupMessages", groupMessages);
+    
+    // Update group's last message time
+    await this.updateGroup(data.groupId, {
+      lastMessageAt: new Date(),
+    });
+    
+    return message;
+  }
+
+  async getGroupMessages(groupId: string): Promise<GroupMessage[]> {
+    const groupMessages = this.getFromStorage<GroupMessage>("groupMessages");
+    return groupMessages
+      .filter(m => m.groupId === groupId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
   // Clear all data (for testing/reset)
   async clearAll(): Promise<void> {
     localStorage.removeItem("users");
     localStorage.removeItem("conversations");
     localStorage.removeItem("messages");
     localStorage.removeItem("memories");
+    localStorage.removeItem("groups");
+    localStorage.removeItem("groupMembers");
+    localStorage.removeItem("groupMessages");
     localStorage.removeItem("currentUserId");
     localStorage.removeItem("currentConversationId");
   }

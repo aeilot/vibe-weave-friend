@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { getDefaultPersonality, generatePersonalitySuggestions, type PersonalityConfig, type Message as AIMessage } from "@/ai";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
+import { LoginDialog } from "@/components/LoginDialog";
 
 interface ApiConfig {
   apiKey: string;
@@ -53,6 +55,8 @@ const menuItems = [
 
 const Profile = () => {
   const { toast } = useToast();
+  const { user, isSignedIn, signOut } = useAuth();
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [isApiDialogOpen, setIsApiDialogOpen] = useState(false);
   const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
   const [isPersonalityDialogOpen, setIsPersonalityDialogOpen] = useState(false);
@@ -60,6 +64,8 @@ const Profile = () => {
   const [showAdminApiKey, setShowAdminApiKey] = useState(false);
   const [personalitySuggestions, setPersonalitySuggestions] = useState<{ suggestions: string[]; explanation: string } | null>(null);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [conversationCount, setConversationCount] = useState(0);
+  const [groupCount, setGroupCount] = useState(0);
 
   const [apiConfig, setApiConfig] = useState<ApiConfig>({
     apiKey: "",
@@ -92,6 +98,21 @@ const Profile = () => {
       setAdminConfig(JSON.parse(savedAdminConfig));
     }
   }, []);
+
+  // Load user stats
+  useEffect(() => {
+    const loadUserStats = async () => {
+      if (user) {
+        const conversations = await db.getUserConversations(user.id);
+        setConversationCount(conversations.length);
+        
+        const groups = await db.getUserGroups(user.id);
+        setGroupCount(groups.length);
+      }
+    };
+    
+    loadUserStats();
+  }, [user]);
 
   const handleSaveApiConfig = () => {
     localStorage.setItem("userApiConfig", JSON.stringify(apiConfig));
@@ -211,21 +232,34 @@ const Profile = () => {
             <div className="flex items-center gap-4">
               <Avatar className="w-20 h-20">
                 <div className="w-full h-full gradient-primary flex items-center justify-center text-2xl font-bold text-white">
-                  你
+                  {isSignedIn && user ? user.name.charAt(0).toUpperCase() : "?"}
                 </div>
                 <AvatarFallback>User</AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <h2 className="text-xl font-bold mb-1">SoulLink 用户</h2>
+                <h2 className="text-xl font-bold mb-1">
+                  {isSignedIn && user ? user.name : "SoulLink 访客"}
+                </h2>
                 <p className="text-sm text-muted-foreground mb-3">
-                  已陪伴 7 天 · 积极成长中
+                  {isSignedIn ? "已登录 · 积极成长中" : "未登录 · 体验模式"}
                 </p>
-                <Button
-                  size="sm"
-                  className="rounded-lg gradient-primary shadow-soft hover:shadow-elevated transition-all duration-300"
-                >
-                  完善资料
-                </Button>
+                {!isSignedIn ? (
+                  <Button
+                    size="sm"
+                    className="rounded-lg gradient-primary shadow-soft hover:shadow-elevated transition-all duration-300"
+                    onClick={() => setShowLoginDialog(true)}
+                  >
+                    立即登录
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-lg"
+                  >
+                    完善资料
+                  </Button>
+                )}
               </div>
             </div>
           </Card>
@@ -233,11 +267,15 @@ const Profile = () => {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3 animate-slide-up">
             <Card className="p-4 text-center">
-              <div className="text-2xl font-bold text-primary mb-1">24</div>
+              <div className="text-2xl font-bold text-primary mb-1">
+                {isSignedIn ? conversationCount : "0"}
+              </div>
               <div className="text-xs text-muted-foreground">对话次数</div>
             </Card>
             <Card className="p-4 text-center">
-              <div className="text-2xl font-bold text-secondary mb-1">3</div>
+              <div className="text-2xl font-bold text-secondary mb-1">
+                {isSignedIn ? groupCount : "0"}
+              </div>
               <div className="text-xs text-muted-foreground">加入群聊</div>
             </Card>
             <Card className="p-4 text-center">
@@ -634,17 +672,29 @@ const Profile = () => {
           </div>
 
           {/* Logout Button */}
-          <Card className="p-4 hover:shadow-elevated transition-all duration-300 cursor-pointer border-destructive/20 animate-slide-up" style={{ animationDelay: "300ms" }}>
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
-                <LogOut className="w-5 h-5 text-destructive" />
+          {isSignedIn && (
+            <Card 
+              className="p-4 hover:shadow-elevated transition-all duration-300 cursor-pointer border-destructive/20 animate-slide-up" 
+              style={{ animationDelay: "300ms" }}
+              onClick={async () => {
+                await signOut();
+                toast({
+                  title: "已退出登录",
+                  description: "你已成功退出登录",
+                });
+              }}
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
+                  <LogOut className="w-5 h-5 text-destructive" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-destructive">退出登录</h3>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-destructive">退出登录</h3>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </div>
-          </Card>
+            </Card>
+          )}
 
           {/* Version Info */}
           <div className="text-center text-xs text-muted-foreground pt-4">
@@ -652,6 +702,9 @@ const Profile = () => {
           </div>
         </div>
       </main>
+
+      {/* Login Dialog */}
+      <LoginDialog open={showLoginDialog} onOpenChange={setShowLoginDialog} />
     </div>
   );
 };
