@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Sparkles, Mic, Settings, Smile, TrendingUp, Heart, Brain, Eye, EyeOff, Lightbulb, RefreshCw } from "lucide-react";
+import { Send, Sparkles, Mic, Settings, Smile, TrendingUp, Heart, Brain, Eye, EyeOff, Lightbulb, RefreshCw, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -613,8 +613,8 @@ const Companion = () => {
                   </div>
                 </div>
                 {message.sender === "user" && (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary/80 to-primary/80 flex items-center justify-center flex-shrink-0 text-white font-semibold text-sm shadow-soft">
-                    你
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-lg ring-2 ring-white/20">
+                    <User className="w-5 h-5 text-white" strokeWidth={2.5} />
                   </div>
                 )}
               </div>

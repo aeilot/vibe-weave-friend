@@ -304,8 +304,8 @@ const Profile = () => {
           {/* User Profile Card */}
           <Card className="p-6 shadow-elevated animate-fade-in">
             <div className="flex items-center gap-4">
-              <Avatar className="w-20 h-20">
-                <div className="w-full h-full gradient-primary flex items-center justify-center text-2xl font-bold text-white">
+              <Avatar className="w-20 h-20 ring-4 ring-primary/10">
+                <div className="w-full h-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center text-2xl font-bold text-white shadow-inner">
                   {isSignedIn && user ? user.name.charAt(0).toUpperCase() : "?"}
                 </div>
                 <AvatarFallback>User</AvatarFallback>
@@ -965,10 +965,39 @@ const Profile = () => {
                     <div className="space-y-0.5">
                       <Label>数据导出</Label>
                       <p className="text-xs text-muted-foreground">
-                        导出你的所有对话和数据
+                        导出 AI 个性设置
                       </p>
                     </div>
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        // Export personality settings
+                        const dataToExport = {
+                          personalityConfig,
+                          exportDate: new Date().toISOString(),
+                          version: "1.0.0"
+                        };
+                        
+                        const blob = new Blob(
+                          [JSON.stringify(dataToExport, null, 2)], 
+                          { type: "application/json" }
+                        );
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement("a");
+                        link.href = url;
+                        link.download = `soullink-personality-${new Date().toISOString().split('T')[0]}.json`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                        
+                        toast({
+                          title: "导出成功",
+                          description: "AI 个性设置已导出",
+                        });
+                      }}
+                    >
                       导出数据
                     </Button>
                   </div>
