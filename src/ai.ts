@@ -7,7 +7,7 @@ import OpenAI from 'openai';
 
 export interface ApiConfig {
   apiKey: string;
-  apiEndpoint?: string;
+  apiEndpoint?: string; // Base URL for OpenAI API (e.g., "https://api.openai.com/v1")
   model: string;
 }
 

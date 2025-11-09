@@ -17,7 +17,7 @@ import OpenAI from 'openai';
 function createOpenAIClient(apiConfig: ApiConfig): OpenAI {
   return new OpenAI({
     apiKey: apiConfig.apiKey,
-    baseURL: apiConfig.apiEndpoint || undefined,
+    baseURL: apiConfig.apiEndpoint || undefined, // Custom base URL support
     dangerouslyAllowBrowser: true,
   });
 }
@@ -28,6 +28,13 @@ function createOpenAIClient(apiConfig: ApiConfig): OpenAI {
 - Improved error messages
 - Cleaner API
 - Direct integration
+- Support for custom base URLs (Azure OpenAI, local models, etc.)
+
+**Base URL Examples**:
+- OpenAI: `https://api.openai.com/v1`
+- Azure OpenAI: `https://YOUR-RESOURCE.openai.azure.com`
+- Local API: `http://localhost:8000/v1`
+- Custom proxy: `https://your-proxy.com/openai/v1`
 
 ### 2. Automatic Session Summaries
 

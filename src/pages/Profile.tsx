@@ -59,7 +59,7 @@ const Profile = () => {
 
   const [apiConfig, setApiConfig] = useState<ApiConfig>({
     apiKey: "",
-    apiEndpoint: "https://api.openai.com/v1/chat/completions",
+    apiEndpoint: "https://api.openai.com/v1",
     model: "gpt-3.5-turbo",
   });
 
@@ -248,13 +248,16 @@ const Profile = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="apiEndpoint">API Endpoint</Label>
+                    <Label htmlFor="apiEndpoint">Base URL / API Endpoint</Label>
                     <Input
                       id="apiEndpoint"
                       value={apiConfig.apiEndpoint}
                       onChange={(e) => setApiConfig(prev => ({ ...prev, apiEndpoint: e.target.value }))}
-                      placeholder="https://api.openai.com/v1/chat/completions"
+                      placeholder="https://api.openai.com/v1"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      OpenAI base URL. For custom endpoints (e.g., Azure, local), change this value.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="model">模型</Label>
@@ -443,13 +446,16 @@ const Profile = () => {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="adminApiEndpoint">强制 API Endpoint</Label>
+                      <Label htmlFor="adminApiEndpoint">强制 Base URL / API Endpoint</Label>
                       <Input
                         id="adminApiEndpoint"
                         value={adminConfig.forcedApiEndpoint || ""}
                         onChange={(e) => setAdminConfig(prev => ({ ...prev, forcedApiEndpoint: e.target.value }))}
-                        placeholder="https://api.openai.com/v1/chat/completions"
+                        placeholder="https://api.openai.com/v1"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        OpenAI base URL for all users
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="adminModel">强制模型</Label>
