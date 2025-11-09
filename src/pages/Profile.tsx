@@ -86,18 +86,59 @@ const Profile = () => {
     return getDefaultPersonality();
   });
 
-  // Load configs from localStorage on mount
+  // Load configs from localStorage and database on mount
   useEffect(() => {
-    const savedApiConfig = localStorage.getItem("userApiConfig");
-    const savedAdminConfig = localStorage.getItem("adminConfig");
+    const loadConfigs = async () => {
+      const savedAdminConfig = localStorage.getItem("adminConfig");
+      
+      if (savedAdminConfig) {
+        setAdminConfig(JSON.parse(savedAdminConfig));
+      }
+
+      // Load API config from database if user is logged in
+      if (user) {
+        try {
+          const settings = await db.getUserSettings(user.id);
+          if (settings) {
+            setApiConfig({
+              apiKey: settings.apiKey || "",
+              apiEndpoint: settings.apiEndpoint || "https://api.openai.com/v1",
+              model: settings.model || "gpt-3.5-turbo",
+            });
+          } else {
+            // Fallback to localStorage for backward compatibility
+            const savedApiConfig = localStorage.getItem("userApiConfig");
+            if (savedApiConfig) {
+              const config = JSON.parse(savedApiConfig);
+              setApiConfig(config);
+              // Migrate to database
+              await db.createUserSettings({
+                userId: user.id,
+                apiKey: config.apiKey,
+                apiEndpoint: config.apiEndpoint,
+                model: config.model,
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load user settings:", error);
+          // Fallback to localStorage
+          const savedApiConfig = localStorage.getItem("userApiConfig");
+          if (savedApiConfig) {
+            setApiConfig(JSON.parse(savedApiConfig));
+          }
+        }
+      } else {
+        // Guest mode: use localStorage
+        const savedApiConfig = localStorage.getItem("userApiConfig");
+        if (savedApiConfig) {
+          setApiConfig(JSON.parse(savedApiConfig));
+        }
+      }
+    };
     
-    if (savedApiConfig) {
-      setApiConfig(JSON.parse(savedApiConfig));
-    }
-    if (savedAdminConfig) {
-      setAdminConfig(JSON.parse(savedAdminConfig));
-    }
-  }, []);
+    loadConfigs();
+  }, [user]);
 
   // Load user stats
   useEffect(() => {
@@ -114,13 +155,42 @@ const Profile = () => {
     loadUserStats();
   }, [user]);
 
-  const handleSaveApiConfig = () => {
-    localStorage.setItem("userApiConfig", JSON.stringify(apiConfig));
-    setIsApiDialogOpen(false);
-    toast({
-      title: "保存成功",
-      description: "AI API 配置已保存",
-    });
+  const handleSaveApiConfig = async () => {
+    if (user) {
+      // Save to database for logged-in users
+      try {
+        await db.updateUserSettings(user.id, {
+          apiKey: apiConfig.apiKey,
+          apiEndpoint: apiConfig.apiEndpoint,
+          model: apiConfig.model,
+        });
+        // Also save to localStorage for backward compatibility
+        localStorage.setItem("userApiConfig", JSON.stringify(apiConfig));
+        setIsApiDialogOpen(false);
+        toast({
+          title: "保存成功",
+          description: "AI API 配置已保存到数据库",
+        });
+      } catch (error) {
+        console.error("Failed to save user settings:", error);
+        toast({
+          title: "保存失败",
+          description: "无法保存配置到数据库，已保存到本地",
+          variant: "destructive",
+        });
+        // Fallback to localStorage
+        localStorage.setItem("userApiConfig", JSON.stringify(apiConfig));
+        setIsApiDialogOpen(false);
+      }
+    } else {
+      // Guest mode: save to localStorage only
+      localStorage.setItem("userApiConfig", JSON.stringify(apiConfig));
+      setIsApiDialogOpen(false);
+      toast({
+        title: "保存成功",
+        description: "AI API 配置已保存（访客模式仅保存到本地）",
+      });
+    }
   };
 
   const handleSavePersonalityConfig = () => {

@@ -196,6 +196,8 @@ export async function callLLM(
   adminConfig?: AdminConfig
 ): Promise<string | { messages: string[] }> {
   // Load API config from localStorage if not provided
+  // Note: Database-loaded config should be passed in via apiConfig parameter
+  // localStorage is used as fallback for backward compatibility
   const config = apiConfig || JSON.parse(localStorage.getItem("userApiConfig") || "null");
   const admin = adminConfig || JSON.parse(localStorage.getItem("adminConfig") || "null");
 
