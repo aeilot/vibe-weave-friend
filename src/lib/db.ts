@@ -75,6 +75,16 @@ export interface GroupMessage {
   createdAt: Date;
 }
 
+export interface UserSettings {
+  id: string;
+  userId: string;
+  apiKey?: string;
+  apiEndpoint?: string;
+  model?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 class DatabaseService {
   private getFromStorage<T>(key: string): T[] {
     const data = localStorage.getItem(key);
@@ -412,6 +422,70 @@ class DatabaseService {
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }
 
+  // UserSettings operations
+  // SECURITY NOTE: API keys are stored in plain text in localStorage/database
+  // This is necessary for the application to make API calls on behalf of users
+  // For production deployments, consider implementing:
+  // 1. Backend proxy pattern to avoid storing keys in frontend
+  // 2. Encryption at rest with secure key management
+  // 3. See SECURITY_API_KEYS.md for detailed recommendations
+  async getUserSettings(userId: string): Promise<UserSettings | null> {
+    const settings = this.getFromStorage<UserSettings>("userSettings");
+    return settings.find(s => s.userId === userId) || null;
+  }
+
+  async createUserSettings(data: {
+    userId: string;
+    apiKey?: string;
+    apiEndpoint?: string;
+    model?: string;
+  }): Promise<UserSettings> {
+    const settings = this.getFromStorage<UserSettings>("userSettings");
+    const newSettings: UserSettings = {
+      id: this.generateId(),
+      userId: data.userId,
+      apiKey: data.apiKey, // Stored in plain text - see security note above
+      apiEndpoint: data.apiEndpoint,
+      model: data.model,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    settings.push(newSettings);
+    this.saveToStorage("userSettings", settings);
+    return newSettings;
+  }
+
+  async updateUserSettings(
+    userId: string,
+    updates: {
+      apiKey?: string;
+      apiEndpoint?: string;
+      model?: string;
+    }
+  ): Promise<UserSettings | null> {
+    const settings = this.getFromStorage<UserSettings>("userSettings");
+    const index = settings.findIndex(s => s.userId === userId);
+    
+    if (index === -1) {
+      // Create new settings if not exists
+      return this.createUserSettings({ userId, ...updates });
+    }
+    
+    settings[index] = {
+      ...settings[index],
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.saveToStorage("userSettings", settings);
+    return settings[index];
+  }
+
+  async deleteUserSettings(userId: string): Promise<void> {
+    const settings = this.getFromStorage<UserSettings>("userSettings");
+    const filtered = settings.filter(s => s.userId !== userId);
+    this.saveToStorage("userSettings", filtered);
+  }
+
   // Clear all data (for testing/reset)
   async clearAll(): Promise<void> {
     localStorage.removeItem("users");
@@ -421,6 +495,7 @@ class DatabaseService {
     localStorage.removeItem("groups");
     localStorage.removeItem("groupMembers");
     localStorage.removeItem("groupMessages");
+    localStorage.removeItem("userSettings");
     localStorage.removeItem("currentUserId");
     localStorage.removeItem("currentConversationId");
   }
