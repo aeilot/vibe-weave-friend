@@ -17,6 +17,10 @@ export interface Conversation {
   id: string;
   title?: string;
   userId: string;
+  summary?: string; // Session summary
+  messageCount: number;
+  lastActivityAt?: Date;
+  currentPersonality?: string; // Current personality prompt
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +34,7 @@ export interface Message {
   hasMemory: boolean;
   memoryTag?: string;
   emotionDetected?: string;
+  isProactive?: boolean; // Mark proactive messages
   createdAt: Date;
 }
 
@@ -96,6 +101,7 @@ class DatabaseService {
       id: this.generateId(),
       title,
       userId,
+      messageCount: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -107,6 +113,20 @@ class DatabaseService {
   async getConversation(id: string): Promise<Conversation | null> {
     const conversations = this.getFromStorage<Conversation>("conversations");
     return conversations.find(c => c.id === id) || null;
+  }
+
+  async updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation | null> {
+    const conversations = this.getFromStorage<Conversation>("conversations");
+    const index = conversations.findIndex(c => c.id === id);
+    if (index === -1) return null;
+    
+    conversations[index] = {
+      ...conversations[index],
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.saveToStorage("conversations", conversations);
+    return conversations[index];
   }
 
   async getUserConversations(userId: string): Promise<Conversation[]> {
@@ -137,6 +157,7 @@ class DatabaseService {
     hasMemory?: boolean;
     memoryTag?: string;
     emotionDetected?: string;
+    isProactive?: boolean;
   }): Promise<Message> {
     const messages = this.getFromStorage<Message>("messages");
     const message: Message = {
@@ -148,10 +169,21 @@ class DatabaseService {
       hasMemory: data.hasMemory || false,
       memoryTag: data.memoryTag,
       emotionDetected: data.emotionDetected,
+      isProactive: data.isProactive,
       createdAt: new Date(),
     };
     messages.push(message);
     this.saveToStorage("messages", messages);
+    
+    // Update conversation message count and last activity
+    const conversation = await this.getConversation(data.conversationId);
+    if (conversation) {
+      await this.updateConversation(data.conversationId, {
+        messageCount: (conversation.messageCount || 0) + 1,
+        lastActivityAt: new Date(),
+      });
+    }
+    
     return message;
   }
 

@@ -1,11 +1,13 @@
 /**
  * AI functionality module for LLM-based personality simulation and chatting
- * This module provides functions to interact with various LLM providers
+ * Uses openai-node for LLM integration with advanced features
  */
+
+import OpenAI from 'openai';
 
 export interface ApiConfig {
   apiKey: string;
-  apiEndpoint: string;
+  apiEndpoint?: string;
   model: string;
 }
 
@@ -25,6 +27,7 @@ export interface Message {
 
 export interface AIResponse {
   content: string;
+  messages?: string[]; // Support for split messages
   hasMemory?: boolean;
   memoryTag?: string;
   emotionDetected?: "positive" | "neutral" | "negative";
@@ -34,6 +37,25 @@ export interface PersonalityConfig {
   name: string;
   traits: string[];
   systemPrompt: string;
+}
+
+export interface SessionSummary {
+  summary: string;
+  messageCount: number;
+  lastUpdated: Date;
+}
+
+export interface PersonalityUpdateDecision {
+  shouldUpdate: boolean;
+  reason: string;
+  suggestedPersonality?: string;
+  confidence: number;
+}
+
+export interface ProactiveDecision {
+  action: "continue" | "new_topic" | "wait";
+  reason: string;
+  suggestedMessage?: string;
 }
 
 /**
@@ -59,6 +81,33 @@ const DEFAULT_PERSONALITY: PersonalityConfig = {
 
 请始终保持专业、友善和支持性的态度。`,
 };
+
+/**
+ * System prompt for split message support
+ */
+const SPLIT_MESSAGE_SYSTEM_PROMPT = `You can optionally split your response into multiple messages for better readability.
+If you want to split your response, return ONLY a JSON object in this exact format:
+{"messages": ["first message", "second message", "third message"]}
+
+If you prefer to send a single message, just reply with plain text as normal.
+
+Important:
+- If using JSON format, the response MUST be valid JSON and nothing else
+- Each message in the array should be a complete thought or idea
+- Use this feature when the response naturally breaks into multiple parts (e.g., greeting + answer, or multiple steps)
+- Don't overuse it - only split when it improves clarity
+- Reply in the sender's language`;
+
+/**
+ * Create OpenAI client instance
+ */
+function createOpenAIClient(apiConfig: ApiConfig): OpenAI {
+  return new OpenAI({
+    apiKey: apiConfig.apiKey,
+    baseURL: apiConfig.apiEndpoint || undefined,
+    dangerouslyAllowBrowser: true, // Required for browser usage
+  });
+}
 
 /**
  * Detect emotion from user message
@@ -139,13 +188,13 @@ export function shouldTagMemory(message: string): { hasMemory: boolean; memoryTa
 }
 
 /**
- * Call LLM API for chat completion
+ * Call LLM API for chat completion using OpenAI
  */
 export async function callLLM(
   messages: Message[],
   apiConfig?: ApiConfig,
   adminConfig?: AdminConfig
-): Promise<string> {
+): Promise<string | { messages: string[] }> {
   // Load API config from localStorage if not provided
   const config = apiConfig || JSON.parse(localStorage.getItem("userApiConfig") || "null");
   const admin = adminConfig || JSON.parse(localStorage.getItem("adminConfig") || "null");
@@ -154,66 +203,72 @@ export async function callLLM(
     throw new Error("请先在个人设置中配置 AI API");
   }
 
-  // Use Supabase edge function as proxy if available
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  if (supabaseUrl && supabaseAnonKey) {
-    try {
-      const response = await fetch(`${supabaseUrl}/functions/v1/ai-proxy`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseAnonKey}`,
-        },
-        body: JSON.stringify({
-          messages,
-          apiConfig: config,
-          adminConfig: admin,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`API proxy error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.choices[0].message.content;
-    } catch (error) {
-      console.error("Supabase proxy error, falling back to direct API call:", error);
-    }
-  }
-
-  // Direct API call fallback
-  const effectiveConfig = admin?.forceApi ? {
+  // Determine effective config
+  const effectiveConfig: ApiConfig = admin?.forceApi ? {
     apiKey: admin.forcedApiKey || config.apiKey,
     apiEndpoint: admin.forcedApiEndpoint || config.apiEndpoint,
     model: admin.forcedModel || config.model,
   } : config;
 
-  const response = await fetch(effectiveConfig.apiEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${effectiveConfig.apiKey}`,
-    },
-    body: JSON.stringify({
+  try {
+    // Create OpenAI client
+    const client = createOpenAIClient(effectiveConfig);
+
+    // Call OpenAI API
+    const response = await client.chat.completions.create({
       model: effectiveConfig.model,
-      messages,
-    }),
-  });
+      messages: messages as any,
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`AI API error: ${response.status} ${errorText}`);
+    const text = response.choices[0].message.content || "";
+
+    // Try to parse as JSON for split messages
+    try {
+      let cleanedText = text.trim();
+      
+      // Remove markdown code block markers if present
+      if (cleanedText.startsWith("```json")) {
+        cleanedText = cleanedText.substring(7);
+      }
+      if (cleanedText.startsWith("```")) {
+        cleanedText = cleanedText.substring(3);
+      }
+      if (cleanedText.endsWith("```")) {
+        cleanedText = cleanedText.substring(0, cleanedText.length - 3);
+      }
+      cleanedText = cleanedText.trim();
+
+      const parsed = JSON.parse(cleanedText);
+
+      // Validate split message structure
+      if (
+        typeof parsed === "object" &&
+        "messages" in parsed &&
+        Array.isArray(parsed.messages) &&
+        parsed.messages.length > 0 &&
+        parsed.messages.every((msg: any) => typeof msg === "string")
+      ) {
+        return { messages: parsed.messages };
+      }
+    } catch {
+      // Not JSON or invalid structure, return as plain text
+    }
+
+    return text;
+  } catch (error: any) {
+    if (error?.status === 401) {
+      throw new Error("AI API 认证失败，请检查您的 API 密钥");
+    } else if (error?.status === 429) {
+      throw new Error("AI API 调用频率超限，请稍后再试");
+    } else if (error?.message) {
+      throw new Error(`AI API 错误: ${error.message}`);
+    }
+    throw new Error("AI API 调用失败，请检查网络或配置");
   }
-
-  const data = await response.json();
-  return data.choices[0].message.content;
 }
 
 /**
- * Generate AI response with personality simulation
+ * Generate AI response with personality simulation and split message support
  */
 export async function generateAIResponse(
   userMessage: string,
@@ -230,16 +285,29 @@ export async function generateAIResponse(
 
   // Try to use LLM if configured
   try {
+    // Add split message prompt to system message
+    const systemMessage = personality.systemPrompt + "\n\n" + SPLIT_MESSAGE_SYSTEM_PROMPT;
+    
     const messages: Message[] = [
-      { role: "system", content: personality.systemPrompt },
+      { role: "system", content: systemMessage },
       ...conversationHistory,
       { role: "user", content: userMessage },
     ];
 
-    const content = await callLLM(messages, apiConfig, adminConfig);
+    const result = await callLLM(messages, apiConfig, adminConfig);
+
+    // Handle split messages
+    if (typeof result === "object" && "messages" in result) {
+      return {
+        content: result.messages[0], // Primary message
+        messages: result.messages, // All messages
+        emotionDetected,
+        ...memoryInfo,
+      };
+    }
 
     return {
-      content,
+      content: result,
       emotionDetected,
       ...memoryInfo,
     };
@@ -253,6 +321,290 @@ export async function generateAIResponse(
       content,
       emotionDetected,
       ...memoryInfo,
+    };
+  }
+}
+
+/**
+ * Generate session summary using OpenAI
+ */
+export async function generateSessionSummary(
+  conversationHistory: Message[],
+  existingSummary?: string,
+  apiConfig?: ApiConfig,
+  adminConfig?: AdminConfig
+): Promise<string> {
+  if (conversationHistory.length === 0) {
+    return "新对话";
+  }
+
+  // Load API config
+  const config = apiConfig || JSON.parse(localStorage.getItem("userApiConfig") || "null");
+  
+  if (!config) {
+    // Fallback: use first user message
+    const firstUserMsg = conversationHistory.find(m => m.role === "user");
+    if (firstUserMsg) {
+      return firstUserMsg.content.substring(0, 50) + (firstUserMsg.content.length > 50 ? "..." : "");
+    }
+    return "聊天会话";
+  }
+
+  try {
+    // Build conversation text
+    let conversationText = "";
+    for (const msg of conversationHistory.slice(-20)) { // Last 20 messages
+      const role = msg.role === "user" ? "用户" : "AI";
+      conversationText += `${role}: ${msg.content}\n`;
+    }
+
+    const prompt = existingSummary
+      ? `你是一个主题生成助手，负责根据最近的对话生成一个当前对话的主题。\n\n最近的对话记录：\n"${existingSummary}"\n\n${conversationText}\n\n请提供一个更新后的主题，包含新消息。主题应该简洁（1-2句话，最多100个字符），捕捉对话的主要内容。只返回主题文本，不要包含其他内容。`
+      : `你是一个主题生成助手。请根据以下对话生成一个简洁的主题（1-2句话，最多100个字符）：\n\n${conversationText}\n\n只返回主题文本。`;
+
+    const client = createOpenAIClient(config);
+    const response = await client.chat.completions.create({
+      model: config.model,
+      messages: [
+        { role: "system", content: "你是一个创建简洁对话主题的助手。保持主题在100个字符以内。" },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 50,
+      temperature: 0.5,
+    });
+
+    let summary = response.choices[0].message.content || "聊天会话";
+    
+    // Ensure summary is not too long
+    if (summary.length > 100) {
+      summary = summary.substring(0, 97) + "...";
+    }
+
+    return summary;
+  } catch (error) {
+    console.error("Failed to generate summary:", error);
+    // Fallback
+    const firstUserMsg = conversationHistory.find(m => m.role === "user");
+    if (firstUserMsg) {
+      return firstUserMsg.content.substring(0, 50) + (firstUserMsg.content.length > 50 ? "..." : "");
+    }
+    return "聊天会话";
+  }
+}
+
+/**
+ * Decide if personality should be updated based on conversation patterns
+ */
+export async function decidePersonalityUpdate(
+  conversationHistory: Message[],
+  currentPersonality: PersonalityConfig,
+  messageCount: number,
+  sessionSummary: string,
+  apiConfig?: ApiConfig,
+  adminConfig?: AdminConfig
+): Promise<PersonalityUpdateDecision> {
+  const MIN_MESSAGES_FOR_UPDATE = 20;
+
+  if (messageCount < MIN_MESSAGES_FOR_UPDATE) {
+    return {
+      shouldUpdate: false,
+      reason: `消息数量不足 (需要至少 ${MIN_MESSAGES_FOR_UPDATE} 条，当前 ${messageCount} 条)`,
+      confidence: 0.0,
+    };
+  }
+
+  // Load API config
+  const config = apiConfig || JSON.parse(localStorage.getItem("userApiConfig") || "null");
+  
+  if (!config) {
+    // Simple heuristic fallback
+    if (messageCount % 50 === 0) {
+      return {
+        shouldUpdate: true,
+        reason: "达到50条消息，建议考虑更新个性",
+        suggestedPersonality: currentPersonality.systemPrompt,
+        confidence: 0.5,
+      };
+    }
+    return {
+      shouldUpdate: false,
+      reason: "未配置 API，无法进行高级分析",
+      confidence: 0.0,
+    };
+  }
+
+  try {
+    // Build conversation text
+    let conversationText = "";
+    for (const msg of conversationHistory.slice(-30)) {
+      const role = msg.role === "user" ? "用户" : "AI";
+      conversationText += `${role}: ${msg.content}\n`;
+    }
+
+    const prompt = `你正在分析一段对话，以确定 AI 助手的个性是否应该更新。
+
+当前个性提示词: "${currentPersonality.systemPrompt}"
+消息数量: ${messageCount}
+会话摘要: ${sessionSummary}
+
+最近的对话:
+${conversationText}
+
+基于这段对话，分析：
+1. 当前个性是否适合用户的需求？
+2. 用户更喜欢什么沟通风格？（正式/随意，详细/简洁等）
+3. 对话中是否有任何模式表明不同的个性会更好？
+4. 更新个性是否会改善用户体验？
+
+考虑：
+- 用户的语言风格和正式程度
+- 正在讨论的话题
+- 用户偏好的详细程度
+- 用户是否对当前回复满意
+- 对话话题的一致性
+
+仅以 JSON 对象的格式回复：
+{"should_update": true/false, "reason": "说明", "suggested_personality": "新个性提示词或 null", "confidence": 0.0-1.0}
+
+suggested_personality 应该是一个清晰、简洁的提示词，描述 AI 应该如何行为。`;
+
+    const client = createOpenAIClient(config);
+    const response = await client.chat.completions.create({
+      model: config.model,
+      messages: [
+        { role: "system", content: "你是分析对话并确定最佳 AI 个性配置的专家。始终用有效的 JSON 回复。" },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.7,
+    });
+
+    const resultText = response.choices[0].message.content || "{}";
+
+    try {
+      const result = JSON.parse(resultText);
+      
+      return {
+        shouldUpdate: result.should_update || false,
+        reason: result.reason || "未知原因",
+        suggestedPersonality: result.suggested_personality || undefined,
+        confidence: result.confidence || 0.0,
+      };
+    } catch (parseError) {
+      return {
+        shouldUpdate: false,
+        reason: "无法解析 AI 响应",
+        confidence: 0.0,
+      };
+    }
+  } catch (error) {
+    console.error("Failed to analyze personality:", error);
+    return {
+      shouldUpdate: false,
+      reason: `分析错误: ${error instanceof Error ? error.message : "未知错误"}`,
+      confidence: 0.0,
+    };
+  }
+}
+
+/**
+ * Make proactive decision based on conversation state
+ */
+export async function makeProactiveDecision(
+  conversationHistory: Message[],
+  sessionSummary: string,
+  messageCount: number,
+  minutesInactive: number,
+  apiConfig?: ApiConfig,
+  adminConfig?: AdminConfig
+): Promise<ProactiveDecision> {
+  const INACTIVITY_THRESHOLD = 5;
+
+  if (minutesInactive < INACTIVITY_THRESHOLD) {
+    return {
+      action: "wait",
+      reason: `活动时间不足 ${INACTIVITY_THRESHOLD} 分钟`,
+    };
+  }
+
+  // Load API config
+  const config = apiConfig || JSON.parse(localStorage.getItem("userApiConfig") || "null");
+  
+  if (!config) {
+    // Simple fallback
+    if (messageCount < 5) {
+      return {
+        action: "wait",
+        reason: "对话太短，无法做出决策",
+      };
+    }
+    return {
+      action: "continue",
+      reason: "对话历史充足",
+      suggestedMessage: "还有什么想聊的吗？我一直都在哦 😊",
+    };
+  }
+
+  try {
+    // Build conversation text
+    let conversationText = "";
+    for (const msg of conversationHistory.slice(-15)) {
+      const role = msg.role === "user" ? "用户" : "AI";
+      conversationText += `${role}: ${msg.content}\n`;
+    }
+
+    const prompt = `你正在分析一段对话，以决定 AI 是否应该主动继续对话。
+
+当前摘要: ${sessionSummary}
+消息数量: ${messageCount}
+不活跃分钟数: ${minutesInactive.toFixed(1)}
+
+最近的对话:
+${conversationText}
+
+基于这些信息，决定 AI 应该：
+1. 'continue' - 主动继续当前话题，给出相关的后续
+2. 'new_topic' - 建议开始一个新的相关话题
+3. 'wait' - 等待用户回复
+
+考虑：
+- 对话是否处于自然停顿点？
+- 是否有未回答的问题或未完成的想法？
+- 后续消息是否会增加价值还是显得打扰？
+
+仅以 JSON 对象的格式回复：
+{"action": "continue|new_topic|wait", "reason": "简短说明", "suggested_message": "要发送的消息或 null"}`;
+
+    const client = createOpenAIClient(config);
+    const response = await client.chat.completions.create({
+      model: config.model,
+      messages: [
+        { role: "system", content: "你是决定 AI 对话策略的专家。始终用有效的 JSON 回复。" },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.7,
+    });
+
+    const resultText = response.choices[0].message.content || "{}";
+
+    try {
+      const result = JSON.parse(resultText);
+      
+      return {
+        action: result.action || "wait",
+        reason: result.reason || "未知原因",
+        suggestedMessage: result.suggested_message || undefined,
+      };
+    } catch (parseError) {
+      return {
+        action: "wait",
+        reason: "无法解析 AI 响应",
+      };
+    }
+  } catch (error) {
+    console.error("Failed to make proactive decision:", error);
+    return {
+      action: "wait",
+      reason: `决策错误: ${error instanceof Error ? error.message : "未知错误"}`,
     };
   }
 }

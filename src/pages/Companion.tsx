@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Sparkles, Mic, Settings, Smile, TrendingUp, Heart } from "lucide-react";
@@ -6,9 +6,16 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { generateAIResponse, type Message as AIMessage } from "@/ai";
+import { 
+  generateAIResponse, 
+  generateSessionSummary, 
+  decidePersonalityUpdate, 
+  getDefaultPersonality,
+  type Message as AIMessage 
+} from "@/ai";
 import { db } from "@/lib/db";
 import { useToast } from "@/hooks/use-toast";
+import { backgroundTasks } from "@/lib/backgroundTasks";
 
 interface Message {
   id: string;
@@ -18,6 +25,8 @@ interface Message {
   hasMemory?: boolean;
   memoryTag?: string;
   emotionDetected?: "positive" | "neutral" | "negative";
+  isProactive?: boolean;
+  messages?: string[]; // For split messages
 }
 
 const quickReplies = [
@@ -78,6 +87,7 @@ const Companion = () => {
             hasMemory: m.hasMemory,
             memoryTag: m.memoryTag || undefined,
             emotionDetected: m.emotionDetected as "positive" | "neutral" | "negative" | undefined,
+            isProactive: m.isProactive,
           })));
         }
       } catch (error) {
@@ -93,6 +103,45 @@ const Companion = () => {
     loadMessages();
   }, [toast]);
 
+  // Start background tasks for proactive messaging
+  useEffect(() => {
+    backgroundTasks.start();
+    
+    // Listen for proactive messages
+    const handleProactiveMessage = ((event: CustomEvent) => {
+      const { message } = event.detail;
+      // Reload messages to show the new proactive message
+      const reloadMessages = async () => {
+        const conversation = await db.getCurrentConversation();
+        const dbMessages = await db.getConversationMessages(conversation.id);
+        setMessages(dbMessages.map(m => ({
+          id: m.id,
+          content: m.content,
+          sender: m.sender as "user" | "ai",
+          timestamp: new Date(m.createdAt),
+          hasMemory: m.hasMemory,
+          memoryTag: m.memoryTag || undefined,
+          emotionDetected: m.emotionDetected as "positive" | "neutral" | "negative" | undefined,
+          isProactive: m.isProactive,
+        })));
+        
+        toast({
+          title: "收到主动消息",
+          description: message.substring(0, 50) + "...",
+        });
+      };
+      reloadMessages();
+    }) as EventListener;
+    
+    window.addEventListener("proactive-message", handleProactiveMessage);
+    
+    return () => {
+      window.removeEventListener("proactive-message", handleProactiveMessage);
+      backgroundTasks.stop();
+    };
+  }, [toast]);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -140,21 +189,67 @@ const Companion = () => {
           content: m.content,
         }));
 
+      // Get current personality or use default
+      const defaultPersonality = getDefaultPersonality();
+      const currentPersonality = conversation.currentPersonality 
+        ? { ...defaultPersonality, systemPrompt: conversation.currentPersonality }
+        : defaultPersonality;
+
       // Generate AI response
       const aiResponse = await generateAIResponse(
         messageContent,
-        conversationHistory
+        conversationHistory,
+        currentPersonality
       );
 
-      // Save AI response to database
-      const aiMessage = await db.createMessage({
-        content: aiResponse.content,
-        sender: "ai",
-        conversationId: conversation.id,
-        hasMemory: aiResponse.hasMemory,
-        memoryTag: aiResponse.memoryTag,
-        emotionDetected: aiResponse.emotionDetected,
-      });
+      // Handle split messages
+      if (aiResponse.messages && aiResponse.messages.length > 1) {
+        // Save and display each message separately
+        for (const msg of aiResponse.messages) {
+          const splitMessage = await db.createMessage({
+            content: msg,
+            sender: "ai",
+            conversationId: conversation.id,
+            hasMemory: aiResponse.hasMemory,
+            memoryTag: aiResponse.memoryTag,
+            emotionDetected: aiResponse.emotionDetected,
+          });
+
+          setMessages(prev => [...prev, {
+            id: splitMessage.id,
+            content: splitMessage.content,
+            sender: "ai",
+            timestamp: new Date(splitMessage.createdAt),
+            hasMemory: splitMessage.hasMemory,
+            memoryTag: splitMessage.memoryTag || undefined,
+            emotionDetected: splitMessage.emotionDetected as "positive" | "neutral" | "negative" | undefined,
+          }]);
+
+          // Small delay between messages for better UX
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      } else {
+        // Single message
+        const aiMessage = await db.createMessage({
+          content: aiResponse.content,
+          sender: "ai",
+          conversationId: conversation.id,
+          hasMemory: aiResponse.hasMemory,
+          memoryTag: aiResponse.memoryTag,
+          emotionDetected: aiResponse.emotionDetected,
+        });
+
+        // Add to UI
+        setMessages(prev => [...prev, {
+          id: aiMessage.id,
+          content: aiMessage.content,
+          sender: "ai",
+          timestamp: new Date(aiMessage.createdAt),
+          hasMemory: aiMessage.hasMemory,
+          memoryTag: aiMessage.memoryTag || undefined,
+          emotionDetected: aiMessage.emotionDetected as "positive" | "neutral" | "negative" | undefined,
+        }]);
+      }
 
       // Save memory if tagged
       if (aiResponse.hasMemory && aiResponse.memoryTag) {
@@ -165,16 +260,68 @@ const Companion = () => {
         });
       }
 
-      // Add to UI
-      setMessages(prev => [...prev, {
-        id: aiMessage.id,
-        content: aiMessage.content,
-        sender: "ai",
-        timestamp: new Date(aiMessage.createdAt),
-        hasMemory: aiMessage.hasMemory,
-        memoryTag: aiMessage.memoryTag || undefined,
-        emotionDetected: aiMessage.emotionDetected as "positive" | "neutral" | "negative" | undefined,
-      }]);
+      // Get updated conversation
+      const updatedConversation = await db.getConversation(conversation.id);
+      const messageCount = updatedConversation?.messageCount || 0;
+
+      // Auto-generate summary every 10 messages
+      if (messageCount % 10 === 0 && messageCount > 0) {
+        try {
+          const allMessages = await db.getConversationMessages(conversation.id);
+          const historyForSummary: AIMessage[] = allMessages.map(m => ({
+            role: m.sender === "user" ? "user" : "assistant",
+            content: m.content,
+          })) as AIMessage[];
+
+          const summary = await generateSessionSummary(
+            historyForSummary,
+            conversation.summary
+          );
+
+          await db.updateConversation(conversation.id, {
+            summary,
+            title: summary.substring(0, 50),
+          });
+
+          toast({
+            title: "会话已更新",
+            description: `自动生成摘要: ${summary.substring(0, 50)}...`,
+          });
+        } catch (summaryError) {
+          console.error("Failed to generate summary:", summaryError);
+        }
+      }
+
+      // Check for personality update every 20 messages
+      if (messageCount % 20 === 0 && messageCount >= 20) {
+        try {
+          const allMessages = await db.getConversationMessages(conversation.id);
+          const historyForAnalysis: AIMessage[] = allMessages.map(m => ({
+            role: m.sender === "user" ? "user" : "assistant",
+            content: m.content,
+          })) as AIMessage[];
+
+          const decision = await decidePersonalityUpdate(
+            historyForAnalysis,
+            currentPersonality,
+            messageCount,
+            conversation.summary || "新对话"
+          );
+
+          if (decision.shouldUpdate && decision.suggestedPersonality) {
+            await db.updateConversation(conversation.id, {
+              currentPersonality: decision.suggestedPersonality,
+            });
+
+            toast({
+              title: "个性已自适应",
+              description: `${decision.reason} (置信度: ${(decision.confidence * 100).toFixed(0)}%)`,
+            });
+          }
+        } catch (personalityError) {
+          console.error("Failed to check personality update:", personalityError);
+        }
+      }
 
     } catch (error) {
       console.error("Failed to send message:", error);
