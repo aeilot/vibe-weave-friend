@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Settings, Bell, Shield, HelpCircle, LogOut, ChevronRight, User, Cpu, Eye, EyeOff } from "lucide-react";
+import { Settings, Bell, Shield, HelpCircle, LogOut, ChevronRight, User, Cpu, Eye, EyeOff, Brain, Sparkles } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -7,7 +7,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { getDefaultPersonality, type PersonalityConfig } from "@/ai";
 
 interface ApiConfig {
   apiKey: string;
@@ -51,6 +53,7 @@ const Profile = () => {
   const { toast } = useToast();
   const [isApiDialogOpen, setIsApiDialogOpen] = useState(false);
   const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
+  const [isPersonalityDialogOpen, setIsPersonalityDialogOpen] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showAdminApiKey, setShowAdminApiKey] = useState(false);
 
@@ -63,6 +66,14 @@ const Profile = () => {
   const [adminConfig, setAdminConfig] = useState<AdminConfig>({
     forceApi: false,
     useLocalProgram: false,
+  });
+
+  const [personalityConfig, setPersonalityConfig] = useState<PersonalityConfig>(() => {
+    const saved = localStorage.getItem("personalityConfig");
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return getDefaultPersonality();
   });
 
   // Load configs from localStorage on mount
@@ -84,6 +95,25 @@ const Profile = () => {
     toast({
       title: "保存成功",
       description: "AI API 配置已保存",
+    });
+  };
+
+  const handleSavePersonalityConfig = () => {
+    localStorage.setItem("personalityConfig", JSON.stringify(personalityConfig));
+    setIsPersonalityDialogOpen(false);
+    toast({
+      title: "个性设置已保存",
+      description: "AI 个性配置已更新",
+    });
+  };
+
+  const handleResetPersonality = () => {
+    const defaultPersonality = getDefaultPersonality();
+    setPersonalityConfig(defaultPersonality);
+    localStorage.setItem("personalityConfig", JSON.stringify(defaultPersonality));
+    toast({
+      title: "已重置",
+      description: "AI 个性已恢复为默认设置",
     });
   };
 
@@ -247,6 +277,107 @@ const Profile = () => {
               </DialogContent>
             </Dialog>
           )}
+
+          {/* Personality Configuration */}
+          <Dialog open={isPersonalityDialogOpen} onOpenChange={setIsPersonalityDialogOpen}>
+            <DialogTrigger asChild>
+              <Card className="p-4 hover:shadow-elevated transition-all duration-300 cursor-pointer animate-slide-up" style={{ animationDelay: "160ms" }}>
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 flex items-center justify-center">
+                    <Brain className="w-5 h-5 text-purple-500" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-0.5">AI 个性设置</h3>
+                    <p className="text-xs text-muted-foreground">
+                      自定义 AI 的个性和行为方式
+                    </p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </div>
+              </Card>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-purple-500" />
+                  AI 个性设置
+                </DialogTitle>
+                <DialogDescription>
+                  配置 AI 助手的名称、特质和系统提示词，打造专属于你的 AI 伴侣
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="personalityName">AI 名称</Label>
+                  <Input
+                    id="personalityName"
+                    value={personalityConfig.name}
+                    onChange={(e) => setPersonalityConfig(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Soul"
+                  />
+                  <p className="text-xs text-muted-foreground">给你的 AI 助手起一个名字</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="personalityTraits">个性特质</Label>
+                  <Input
+                    id="personalityTraits"
+                    value={personalityConfig.traits.join(", ")}
+                    onChange={(e) => setPersonalityConfig(prev => ({ 
+                      ...prev, 
+                      traits: e.target.value.split(",").map(t => t.trim()).filter(t => t) 
+                    }))}
+                    placeholder="关怀, 倾听, 陪伴, 理解, 温暖"
+                  />
+                  <p className="text-xs text-muted-foreground">用逗号分隔多个特质</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="systemPrompt">系统提示词</Label>
+                  <Textarea
+                    id="systemPrompt"
+                    value={personalityConfig.systemPrompt}
+                    onChange={(e) => setPersonalityConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
+                    placeholder="你是一个温暖、善解人意的AI伴侣助手..."
+                    rows={12}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    定义 AI 的行为方式、语气和对话风格。支持 Markdown 格式。
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 text-primary mt-0.5" />
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p className="font-semibold text-foreground">提示词编写建议：</p>
+                      <ul className="list-disc list-inside space-y-0.5 ml-2">
+                        <li>明确定义 AI 的角色和身份</li>
+                        <li>说明 AI 应该如何回复（语气、风格、长度）</li>
+                        <li>列出 AI 的主要特质和行为准则</li>
+                        <li>指定特殊要求（如使用表情符号、记住信息等）</li>
+                        <li>AI 会根据对话自动适应，但这是基础个性</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-between gap-3">
+                <Button variant="outline" onClick={handleResetPersonality}>
+                  重置为默认
+                </Button>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setIsPersonalityDialogOpen(false)}>
+                    取消
+                  </Button>
+                  <Button onClick={handleSavePersonalityConfig}>
+                    保存配置
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Admin Configuration */}
           <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>

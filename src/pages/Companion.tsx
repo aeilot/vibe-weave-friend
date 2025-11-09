@@ -189,11 +189,12 @@ const Companion = () => {
           content: m.content,
         }));
 
-      // Get current personality or use default
-      const defaultPersonality = getDefaultPersonality();
+      // Get current personality or use saved/default
+      const savedPersonality = localStorage.getItem("personalityConfig");
+      const userPersonality = savedPersonality ? JSON.parse(savedPersonality) : getDefaultPersonality();
       const currentPersonality = conversation.currentPersonality 
-        ? { ...defaultPersonality, systemPrompt: conversation.currentPersonality }
-        : defaultPersonality;
+        ? { ...userPersonality, systemPrompt: conversation.currentPersonality }
+        : userPersonality;
 
       // Generate AI response
       const aiResponse = await generateAIResponse(

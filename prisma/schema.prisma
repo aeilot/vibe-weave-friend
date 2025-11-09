@@ -2,13 +2,13 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -23,36 +23,51 @@ model User {
 }
 
 model Conversation {
-  id        String   @id @default(uuid())
-  title     String?
-  userId    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String    @id @default(uuid())
+  title             String?
+  userId            String
+  summary           String?
+  messageCount      Int       @default(0)
+  lastActivityAt    DateTime?
+  currentPersonality String?  @db.Text
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages Message[]
+  
+  @@index([userId])
+  @@index([lastActivityAt])
 }
 
 model Message {
-  id             String   @id @default(uuid())
-  content        String
-  sender         String   // "user" or "ai"
-  conversationId String
-  userId         String?
-  hasMemory      Boolean  @default(false)
-  memoryTag      String?
-  emotionDetected String? // "positive", "neutral", "negative"
-  createdAt      DateTime @default(now())
+  id              String   @id @default(uuid())
+  content         String   @db.Text
+  sender          String   // "user" or "ai"
+  conversationId  String
+  userId          String?
+  hasMemory       Boolean  @default(false)
+  memoryTag       String?
+  emotionDetected String?  // "positive", "neutral", "negative"
+  isProactive     Boolean  @default(false)
+  createdAt       DateTime @default(now())
   
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([conversationId])
+  @@index([createdAt])
+  @@index([sender])
 }
 
 model Memory {
   id        String   @id @default(uuid())
-  content   String
-  category  String? // e.g., "preference", "important", "personal"
+  content   String   @db.Text
+  category  String?  // e.g., "preference", "important", "personal"
   userId    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([category])
 }
