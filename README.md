@@ -8,12 +8,24 @@
 
 This project includes:
 - **AI Companion**: LLM-powered chat with personality simulation
+- **User Authentication**: Secure login with Clerk
+- **Conversation Tracking**: Track conversation history and counts
+- **Group Chat**: Create and join group chats with other users
 - **Automatic Summaries**: Session summaries every 10 messages
 - **Adaptive Personality**: AI adapts based on conversation patterns
 - **Proactive Messaging**: Background tasks for intelligent engagement
 - **Split Messages**: Multi-message response support
 - **Neon Database**: Serverless PostgreSQL integration
 - **Personality Settings**: Customize AI behavior and traits
+- **Archive & Diary**: Save and edit your conversation memories
+
+## Authentication
+
+The application uses **Clerk** for user authentication:
+- See [CLERK_SETUP.md](./CLERK_SETUP.md) for setup instructions
+- Supports email/password and social login
+- Guest mode available for preview before login
+- Secure session management
 
 ## Database
 
@@ -51,15 +63,20 @@ cd <YOUR_PROJECT_NAME>
 # Step 3: Install the necessary dependencies.
 npm i
 
-# Step 4: (Optional) Setup Neon database
-# Copy .env.example to .env and add your Neon connection string
+# Step 4: (Optional) Setup Clerk Authentication
+# Copy .env.example to .env and add your Clerk publishable key
 cp .env.example .env
+# Edit .env with your VITE_CLERK_PUBLISHABLE_KEY
+# See CLERK_SETUP.md for detailed instructions
+
+# Step 5: (Optional) Setup Neon database
+# Add your Neon connection string to .env
 # Edit .env with your DATABASE_URL
 
-# Step 5: (Optional) Run database migrations
+# Step 6: (Optional) Run database migrations
 npx prisma migrate dev
 
-# Step 6: Start the development server with auto-reloading and an instant preview.
+# Step 7: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
@@ -82,6 +99,7 @@ npm run dev
 This project is built with:
 
 - **Frontend**: Vite, TypeScript, React, shadcn-ui, Tailwind CSS
+- **Authentication**: Clerk for user management and authentication
 - **AI**: OpenAI SDK for LLM integration
 - **Database**: Neon (Serverless PostgreSQL) with Prisma ORM
 - **Storage**: LocalStorage (frontend), PostgreSQL (backend-ready)
@@ -109,6 +127,7 @@ Simply open [Lovable](https://lovable.dev/projects/fb6223f7-d697-4868-bc5e-8a993
    # Add environment variables in Vercel dashboard
    DATABASE_URL=your_neon_connection_string
    DIRECT_URL=your_neon_direct_connection_string
+   VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
    ```
 
 3. **Or deploy to other platforms**:
@@ -129,6 +148,7 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 
 ## Documentation
 
+- [CLERK_SETUP.md](./CLERK_SETUP.md) - Clerk authentication setup guide
 - [NEON_SETUP.md](./NEON_SETUP.md) - Neon database setup guide
 - [DATABASE_CONFIGURATION.md](./DATABASE_CONFIGURATION.md) - Complete database configuration
 - [PRISMA_AI_IMPLEMENTATION.md](./PRISMA_AI_IMPLEMENTATION.md) - AI implementation details
