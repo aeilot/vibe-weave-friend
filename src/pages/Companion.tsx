@@ -613,8 +613,8 @@ const Companion = () => {
                   </div>
                 </div>
                 {message.sender === "user" && (
-                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm">你</span>
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary/80 to-primary/80 flex items-center justify-center flex-shrink-0 text-white font-semibold text-sm shadow-soft">
+                    你
                   </div>
                 )}
               </div>

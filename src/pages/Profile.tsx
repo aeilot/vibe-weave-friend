@@ -66,6 +66,10 @@ const Profile = () => {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [conversationCount, setConversationCount] = useState(0);
   const [groupCount, setGroupCount] = useState(0);
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
+  const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false);
+  const [isPrivacyDialogOpen, setIsPrivacyDialogOpen] = useState(false);
+  const [isHelpDialogOpen, setIsHelpDialogOpen] = useState(false);
 
   const [apiConfig, setApiConfig] = useState<ApiConfig>({
     apiKey: "",
@@ -720,25 +724,371 @@ const Profile = () => {
 
           {/* Menu Items */}
           <div className="space-y-2 animate-slide-up" style={{ animationDelay: "200ms" }}>
-            {menuItems.map((item, index) => (
-              <Card
-                key={index}
-                className="p-4 hover:shadow-elevated transition-all duration-300 cursor-pointer"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
-                    <item.icon className="w-5 h-5 text-primary" />
+            {/* 个人信息 */}
+            <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
+              <DialogTrigger asChild>
+                <Card className="p-4 hover:shadow-elevated transition-all duration-300 cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+                      <User className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-0.5">个人信息</h3>
+                      <p className="text-xs text-muted-foreground">
+                        管理你的个人资料
+                      </p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold mb-0.5">{item.label}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {item.description}
-                    </p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </Card>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>个人信息</DialogTitle>
+                  <DialogDescription>
+                    通过 Clerk 管理你的账户信息
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  {isSignedIn && user ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label>用户名</Label>
+                        <Input value={user.name} disabled />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>邮箱</Label>
+                        <Input value={user.email || "未设置"} disabled />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>用户ID</Label>
+                        <Input value={user.id} disabled className="font-mono text-xs" />
+                      </div>
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <p>• 账户创建时间: {new Date(user.createdAt).toLocaleDateString("zh-CN")}</p>
+                        <p>• 对话次数: {user.conversationCount}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        使用 Clerk SSO 管理。如需修改账户信息，请访问 Clerk 管理面板。
+                      </p>
+                    </>
+                  ) : (
+                    <div className="text-center py-6">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        请先登录查看个人信息
+                      </p>
+                      <Button onClick={() => {
+                        setIsProfileDialogOpen(false);
+                        setShowLoginDialog(true);
+                      }}>
+                        立即登录
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              </Card>
-            ))}
+              </DialogContent>
+            </Dialog>
+
+            {/* 通知设置 */}
+            <Dialog open={isNotificationDialogOpen} onOpenChange={setIsNotificationDialogOpen}>
+              <DialogTrigger asChild>
+                <Card className="p-4 hover:shadow-elevated transition-all duration-300 cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+                      <Bell className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-0.5">通知设置</h3>
+                      <p className="text-xs text-muted-foreground">
+                        消息提醒偏好
+                      </p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                </Card>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>通知设置</DialogTitle>
+                  <DialogDescription>
+                    自定义消息提醒和通知偏好
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>AI 消息提醒</Label>
+                      <p className="text-xs text-muted-foreground">
+                        收到 AI 回复时显示通知
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>群聊消息提醒</Label>
+                      <p className="text-xs text-muted-foreground">
+                        群组有新消息时提醒
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>主动关怀提醒</Label>
+                      <p className="text-xs text-muted-foreground">
+                        AI 主动发起对话时提醒
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>成就解锁提醒</Label>
+                      <p className="text-xs text-muted-foreground">
+                        解锁新成就时显示通知
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>声音提示</Label>
+                      <p className="text-xs text-muted-foreground">
+                        通知时播放提示音
+                      </p>
+                    </div>
+                    <Switch />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={() => {
+                    setIsNotificationDialogOpen(false);
+                    toast({
+                      title: "设置已保存",
+                      description: "通知设置已更新",
+                    });
+                  }}>
+                    保存设置
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* 隐私与安全 */}
+            <Dialog open={isPrivacyDialogOpen} onOpenChange={setIsPrivacyDialogOpen}>
+              <DialogTrigger asChild>
+                <Card className="p-4 hover:shadow-elevated transition-all duration-300 cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-0.5">隐私与安全</h3>
+                      <p className="text-xs text-muted-foreground">
+                        保护你的数据
+                      </p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                </Card>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>隐私与安全</DialogTitle>
+                  <DialogDescription>
+                    了解我们如何保护你的数据和隐私
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">服务条款与隐私政策</h4>
+                    <div className="rounded-lg border p-4 space-y-3 text-sm">
+                      <div>
+                        <p className="font-semibold mb-2">1. 数据收集与使用</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          • SoulLink 收集你的对话记录、个人资料和使用数据，用于提供个性化 AI 陪伴服务<br />
+                          • 所有数据仅用于改善用户体验，不会出售或分享给第三方<br />
+                          • 对话记录存储在你的浏览器本地或加密数据库中
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold mb-2">2. 数据安全</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          • 使用 Clerk 企业级认证系统保护账户安全<br />
+                          • 数据传输采用 HTTPS 加密<br />
+                          • 定期进行安全审计和漏洞修复
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold mb-2">3. 用户权利</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          • 你有权随时查看、修改或删除个人数据<br />
+                          • 退出登录时，所有本地数据将被清除<br />
+                          • 你可以要求导出或永久删除账户数据
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold mb-2">4. Cookie 使用</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          • 使用 Cookie 来维持登录状态和个性化设置<br />
+                          • 使用 localStorage 存储对话历史和用户偏好<br />
+                          • 你可以通过浏览器设置管理 Cookie
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold mb-2">5. AI 数据处理</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          • AI 对话可能通过 OpenAI API 处理<br />
+                          • 对话数据遵循 OpenAI 的隐私政策<br />
+                          • 敏感信息不应在对话中分享
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold mb-2">6. 服务变更</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          • 我们保留随时修改服务条款的权利<br />
+                          • 重大变更会提前通知用户<br />
+                          • 继续使用服务即表示接受新条款
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold mb-2">7. 联系方式</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                          • 如有隐私问题或安全疑虑，请通过 GitHub Issues 联系我们<br />
+                          • 项目地址: https://github.com/aeilot/soullink
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label>数据导出</Label>
+                      <p className="text-xs text-muted-foreground">
+                        导出你的所有对话和数据
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm">
+                      导出数据
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* 帮助与反馈 */}
+            <Dialog open={isHelpDialogOpen} onOpenChange={setIsHelpDialogOpen}>
+              <DialogTrigger asChild>
+                <Card className="p-4 hover:shadow-elevated transition-all duration-300 cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center">
+                      <HelpCircle className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-0.5">帮助与反馈</h3>
+                      <p className="text-xs text-muted-foreground">
+                        获取帮助或提供建议
+                      </p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                </Card>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>帮助与反馈</DialogTitle>
+                  <DialogDescription>
+                    获取使用帮助或向我们提供反馈
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-sm">常见问题</h4>
+                    <div className="space-y-2 text-sm">
+                      <details className="group">
+                        <summary className="cursor-pointer font-medium hover:text-primary">
+                          如何配置 AI API？
+                        </summary>
+                        <p className="text-muted-foreground text-xs mt-2 pl-4">
+                          在个人中心点击"AI API 配置"，输入你的 OpenAI API Key、Base URL 和模型名称即可。
+                        </p>
+                      </details>
+                      <details className="group">
+                        <summary className="cursor-pointer font-medium hover:text-primary">
+                          如何使用档案功能？
+                        </summary>
+                        <p className="text-muted-foreground text-xs mt-2 pl-4">
+                          登录后进入档案页面，可以查看 AI 生成的日记、情绪分析、社交关系洞察等功能。
+                        </p>
+                      </details>
+                      <details className="group">
+                        <summary className="cursor-pointer font-medium hover:text-primary">
+                          数据存储在哪里？
+                        </summary>
+                        <p className="text-muted-foreground text-xs mt-2 pl-4">
+                          未登录时数据存储在浏览器 localStorage 中，登录后可选择存储到云端数据库。
+                        </p>
+                      </details>
+                      <details className="group">
+                        <summary className="cursor-pointer font-medium hover:text-primary">
+                          如何自定义 AI 个性？
+                        </summary>
+                        <p className="text-muted-foreground text-xs mt-2 pl-4">
+                          在个人中心点击"AI 个性设置"，可以自定义 AI 的名字、特质和系统提示词。
+                        </p>
+                      </details>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">项目信息</h4>
+                    <div className="rounded-lg border p-3 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">版本号</span>
+                        <span className="font-mono">v1.0.0</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">GitHub</span>
+                        <a 
+                          href="https://github.com/aeilot/soullink" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          aeilot/soullink
+                        </a>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">技术栈</span>
+                        <span>React + TypeScript + Vite</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">反馈渠道</h4>
+                    <div className="space-y-2">
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => window.open("https://github.com/aeilot/soullink/issues", "_blank")}
+                      >
+                        <HelpCircle className="w-4 h-4 mr-2" />
+                        在 GitHub 上提交 Issue
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => window.open("https://github.com/aeilot/soullink/discussions", "_blank")}
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        参与 GitHub 讨论
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
           {/* Logout Button */}

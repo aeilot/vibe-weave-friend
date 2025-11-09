@@ -50,60 +50,6 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { LoginDialog } from "@/components/LoginDialog";
 
-const stats = [
-  {
-    icon: Calendar,
-    label: "连续陪伴",
-    value: "7",
-    unit: "天",
-    color: "text-primary",
-  },
-  {
-    icon: Heart,
-    label: "情感支持",
-    value: "24",
-    unit: "次",
-    color: "text-secondary",
-  },
-  {
-    icon: Target,
-    label: "目标达成",
-    value: "3",
-    unit: "个",
-    color: "text-success",
-  },
-];
-
-const diaryEntries = [
-  {
-    id: 1,
-    date: "2024-01-20",
-    title: "充实的一天",
-    content: "今天与同事们讨论了新项目的方案，大家的想法都很有创意。晚上和朋友聊天，感觉心情轻松了许多。",
-    mood: "😊",
-    moodText: "快乐",
-    aiGenerated: true,
-  },
-  {
-    id: 2,
-    date: "2024-01-19",
-    title: "平静的周五",
-    content: "工作进展顺利，完成了本周的目标。下班后去公园散步，天气很好。",
-    mood: "😌",
-    moodText: "平静",
-    aiGenerated: true,
-  },
-  {
-    id: 3,
-    date: "2024-01-18",
-    title: "压力与突破",
-    content: "今天遇到了一些工作难题，但通过和 Soul 的对话找到了新的解决思路。感觉自己又成长了一些。",
-    mood: "💪",
-    moodText: "坚强",
-    aiGenerated: true,
-  },
-];
-
 const emotionData = [
   { date: "周一", happy: 60, calm: 70, anxious: 30, sad: 20 },
   { date: "周二", happy: 70, calm: 65, anxious: 25, sad: 15 },
@@ -181,11 +127,72 @@ const Archive = () => {
   const [isGeneratingDiary, setIsGeneratingDiary] = useState(false);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false);
+  
+  // Stats state
+  const [continuousDays, setContinuousDays] = useState(0);
+  const [emotionalSupport, setEmotionalSupport] = useState(0);
+  const [goalsAchieved, setGoalsAchieved] = useState(0);
 
   // Load diaries from database
   useEffect(() => {
     loadDiaries();
   }, [user]);
+  
+  // Load stats
+  useEffect(() => {
+    loadStats();
+  }, [user, isSignedIn]);
+
+  const loadStats = async () => {
+    if (user && isSignedIn) {
+      try {
+        // Calculate continuous days based on conversations
+        const conversations = await db.getUserConversations(user.id);
+        const sortedConvs = conversations
+          .filter(c => c.lastActivityAt)
+          .sort((a, b) => new Date(b.lastActivityAt!).getTime() - new Date(a.lastActivityAt!).getTime());
+        
+        // Calculate continuous days
+        let days = 0;
+        let currentDate = new Date();
+        currentDate.setHours(0, 0, 0, 0);
+        
+        for (const conv of sortedConvs) {
+          const convDate = new Date(conv.lastActivityAt!);
+          convDate.setHours(0, 0, 0, 0);
+          const diffDays = Math.floor((currentDate.getTime() - convDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (diffDays === days) {
+            days++;
+            currentDate.setDate(currentDate.getDate() - 1);
+          } else if (diffDays > days) {
+            break;
+          }
+        }
+        setContinuousDays(days || conversations.length > 0 ? 1 : 0);
+        
+        // Calculate emotional support (count of messages with positive emotion)
+        let supportCount = 0;
+        for (const conv of conversations) {
+          const messages = await db.getConversationMessages(conv.id);
+          supportCount += messages.filter(m => 
+            m.sender === "ai" && (m.emotionDetected === "positive" || m.hasMemory)
+          ).length;
+        }
+        setEmotionalSupport(supportCount);
+        
+        // Goals achieved (count of diaries)
+        const userDiaries = await db.getUserDiaryEntries(user.id);
+        setGoalsAchieved(userDiaries.length);
+      } catch (error) {
+        console.error("Failed to load stats:", error);
+      }
+    } else {
+      setContinuousDays(0);
+      setEmotionalSupport(0);
+      setGoalsAchieved(0);
+    }
+  };
 
   const loadDiaries = async () => {
     if (user) {
@@ -360,18 +367,36 @@ const Archive = () => {
 
           {/* Stats Cards */}
           <div className="grid grid-cols-3 gap-3">
-            {stats.map((stat, index) => (
-              <Card key={index} className="p-3 text-center border-border/50">
-                <stat.icon className={`w-4 h-4 ${stat.color} mx-auto mb-1`} />
-                <div className="text-lg font-bold">
-                  {stat.value}
-                  <span className="text-xs font-normal text-muted-foreground ml-0.5">
-                    {stat.unit}
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground">{stat.label}</div>
-              </Card>
-            ))}
+            <Card className="p-3 text-center border-border/50">
+              <Calendar className="w-4 h-4 text-primary mx-auto mb-1" />
+              <div className="text-lg font-bold">
+                {continuousDays}
+                <span className="text-xs font-normal text-muted-foreground ml-0.5">
+                  天
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground">连续陪伴</div>
+            </Card>
+            <Card className="p-3 text-center border-border/50">
+              <Heart className="w-4 h-4 text-secondary mx-auto mb-1" />
+              <div className="text-lg font-bold">
+                {emotionalSupport}
+                <span className="text-xs font-normal text-muted-foreground ml-0.5">
+                  次
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground">情感支持</div>
+            </Card>
+            <Card className="p-3 text-center border-border/50">
+              <Target className="w-4 h-4 text-success mx-auto mb-1" />
+              <div className="text-lg font-bold">
+                {goalsAchieved}
+                <span className="text-xs font-normal text-muted-foreground ml-0.5">
+                  个
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground">目标达成</div>
+            </Card>
           </div>
         </div>
       </header>
