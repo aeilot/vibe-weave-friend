@@ -44,3 +44,4 @@ yarn.lock
 #.yarn/install-state.gz
 #.pnp.cjs
 #.pnp.loader.mjs
+*.timestamp-*.mjs
