@@ -223,7 +223,7 @@ const Group = () => {
               </DialogContent>
             </Dialog>
           </div>
-          
+
           {/* Search Bar */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -285,90 +285,90 @@ const Group = () => {
             </Card>
           ) : (
             filteredGroups.map((group, index) => (
-            <Card
-              key={group.id}
-              className="p-4 hover:shadow-elevated transition-all duration-300 animate-slide-up border-border/50"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              <div className="flex items-center gap-4">
-                <div 
-                  className="relative cursor-pointer"
-                  onClick={() => {
-                    if (!isSignedIn) {
-                      setShowLoginDialog(true);
-                      toast({
-                        title: "请先登录",
-                        description: "登录后可以查看群聊详情",
-                        variant: "destructive",
-                      });
-                    } else {
-                      navigate(`/group/${group.id}`);
-                    }
-                  }}
-                >
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                    <Users className="w-7 h-7 text-primary" />
-                  </div>
-                  {!isSignedIn && (staticGroups.find(g => g.id === group.id)?.unread || 0) > 0 && (
-                    <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive flex items-center justify-center">
-                      <span className="text-xs text-white font-semibold">
-                        {staticGroups.find(g => g.id === group.id)?.unread}
-                      </span>
+              <Card
+                key={group.id}
+                className="p-4 hover:shadow-elevated transition-all duration-300 animate-slide-up border-border/50"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className="relative cursor-pointer"
+                    onClick={() => {
+                      if (!isSignedIn) {
+                        setShowLoginDialog(true);
+                        toast({
+                          title: "请先登录",
+                          description: "登录后可以查看群聊详情",
+                          variant: "destructive",
+                        });
+                      } else {
+                        navigate(`/group/${group.id}`);
+                      }
+                    }}
+                  >
+                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+                      <Users className="w-7 h-7 text-primary" />
                     </div>
-                  )}
-                </div>
-                
-                <div 
-                  className="flex-1 min-w-0 cursor-pointer"
-                  onClick={() => {
-                    if (!isSignedIn) {
-                      setShowLoginDialog(true);
-                      toast({
-                        title: "请先登录",
-                        description: "登录后可以查看群聊详情",
-                        variant: "destructive",
-                      });
-                    } else {
-                      navigate(`/group/${group.id}`);
-                    }
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-semibold truncate">{group.name}</h3>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {!isSignedIn ? staticGroups.find(g => g.id === group.id)?.time : ""}
-                      </span>
-                      <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                    </div>
+                    {!isSignedIn && (staticGroups.find(g => g.id === group.id)?.unread || 0) > 0 && (
+                      <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive flex items-center justify-center">
+                        <span className="text-xs text-white font-semibold">
+                          {staticGroups.find(g => g.id === group.id)?.unread}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      {!isSignedIn ? (staticGroups.find(g => g.id === group.id)?.members || 0) : 0} 人
-                    </span>
-                  </div>
-                  
-                  <p className="text-sm text-muted-foreground truncate">
-                    {group.description || (!isSignedIn ? staticGroups.find(g => g.id === group.id)?.lastMessage : "")}
-                  </p>
-                </div>
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleGetTopicSuggestions(group);
-                  }}
-                  disabled={loadingSuggestions}
-                  className="rounded-xl flex-shrink-0"
-                >
-                  <Sparkles className={`w-5 h-5 ${loadingSuggestions ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
-            </Card>
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => {
+                      if (!isSignedIn) {
+                        setShowLoginDialog(true);
+                        toast({
+                          title: "请先登录",
+                          description: "登录后可以查看群聊详情",
+                          variant: "destructive",
+                        });
+                      } else {
+                        navigate(`/group/${group.id}`);
+                      }
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold truncate">{group.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {!isSignedIn ? staticGroups.find(g => g.id === group.id)?.time : ""}
+                        </span>
+                        {/* <ArrowRight className="w-4 h-4 text-muted-foreground" /> */}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {!isSignedIn ? (staticGroups.find(g => g.id === group.id)?.members || 0) : 0} 人
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground truncate">
+                      {group.description || (!isSignedIn ? staticGroups.find(g => g.id === group.id)?.lastMessage : "")}
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleGetTopicSuggestions(group);
+                    }}
+                    disabled={loadingSuggestions}
+                    className="rounded-xl flex-shrink-0"
+                  >
+                    <Sparkles className={`w-5 h-5 ${loadingSuggestions ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+              </Card>
             ))
           )}
         </div>
