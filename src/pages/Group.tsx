@@ -83,9 +83,14 @@ const Group = () => {
     updatedAt: new Date(),
   }));
 
-  const filteredGroups = displayGroups.filter(group =>
-    group.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredGroups = displayGroups.filter(group => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      group.name.toLowerCase().includes(searchLower) ||
+      group.description?.toLowerCase().includes(searchLower) ||
+      group.id.toLowerCase().includes(searchLower)
+    );
+  });
 
   const handleCreateGroup = async () => {
     if (!isSignedIn) {
@@ -223,11 +228,16 @@ const Group = () => {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="搜索群聊..."
+              placeholder="搜索群聊名称、描述或 ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 rounded-xl bg-background/50 border-border"
             />
+            {searchQuery && (
+              <Badge variant="secondary" className="absolute right-3 top-1/2 -translate-y-1/2 text-xs">
+                {filteredGroups.length} 个结果
+              </Badge>
+            )}
           </div>
         </div>
       </header>

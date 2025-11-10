@@ -15,7 +15,9 @@ import {
   MessageCircle,
   Plus,
   Trash2,
-  Bot
+  Bot,
+  Copy,
+  Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -111,6 +113,8 @@ const GroupChatEnhanced = () => {
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [editedGroupName, setEditedGroupName] = useState("");
   const [newMemberUserId, setNewMemberUserId] = useState("");
+  const [copiedGroupId, setCopiedGroupId] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -172,6 +176,33 @@ const GroupChatEnhanced = () => {
 
     loadData();
   }, [id, user]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ("Notification" in window) {
+      if (Notification.permission === "granted") {
+        setNotificationsEnabled(true);
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+          setNotificationsEnabled(permission === "granted");
+        });
+      }
+    }
+  }, []);
+
+  // Show notification for new messages
+  useEffect(() => {
+    if (!notificationsEnabled || !group) return;
+    
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.sender !== "user" && document.hidden) {
+      new Notification(`${group.name} - ${lastMessage.senderName}`, {
+        body: lastMessage.content.substring(0, 100),
+        icon: "/icon-192x192.png",
+        tag: `group-${id}`,
+      });
+    }
+  }, [messages, notificationsEnabled, group, id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -291,6 +322,28 @@ const GroupChatEnhanced = () => {
       toast({
         title: "添加失败",
         description: error instanceof Error ? error.message : "无法添加成员",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCopyGroupId = async () => {
+    if (!id) return;
+    
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopiedGroupId(true);
+      setTimeout(() => setCopiedGroupId(false), 2000);
+      
+      toast({
+        title: "群聊 ID 已复制",
+        description: "可以分享给好友加入群聊",
+      });
+    } catch (error) {
+      console.error("Failed to copy group ID:", error);
+      toast({
+        title: "复制失败",
+        description: "无法复制群聊 ID",
         variant: "destructive",
       });
     }
@@ -637,9 +690,35 @@ const GroupChatEnhanced = () => {
                   {/* Group Info */}
                   <div className="space-y-2 pt-4 border-t">
                     <h4 className="text-sm font-semibold">群聊信息</h4>
-                    <div className="space-y-1 text-sm text-muted-foreground">
-                      <p>创建时间: {group?.createdAt ? new Date(group.createdAt).toLocaleDateString("zh-CN") : "未知"}</p>
-                      <p>AI 成员: {aiMembers.length} 个</p>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">群聊 ID:</span>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-1 rounded">
+                            {id?.substring(0, 8)}...
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCopyGroupId}
+                            className="h-8 w-8 p-0"
+                          >
+                            {copiedGroupId ? (
+                              <Check className="w-4 h-4 text-green-500" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-muted-foreground">创建时间: {group?.createdAt ? new Date(group.createdAt).toLocaleDateString("zh-CN") : "未知"}</p>
+                      <p className="text-muted-foreground">AI 成员: {aiMembers.length} 个</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">消息通知:</span>
+                        <Badge variant={notificationsEnabled ? "default" : "secondary"}>
+                          {notificationsEnabled ? "已启用" : "未启用"}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 </div>
