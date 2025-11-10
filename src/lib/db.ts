@@ -98,6 +98,26 @@ export interface DiaryEntry {
   updatedAt: Date;
 }
 
+export interface Milestone {
+  id: string;
+  userId: string;
+  date: string;
+  title: string;
+  description: string;
+  type: string; // "social", "emotion", "milestone"
+  createdAt: Date;
+}
+
+export interface Achievement {
+  id: string;
+  userId: string;
+  name: string;
+  description: string;
+  unlocked: boolean;
+  unlockedAt?: Date;
+  createdAt: Date;
+}
+
 class DatabaseService {
   private getFromStorage<T>(key: string): T[] {
     const data = localStorage.getItem(key);
@@ -558,6 +578,309 @@ class DatabaseService {
     this.saveToStorage("diaryEntries", diaries.filter(d => d.id !== id));
   }
 
+  // Milestone operations
+  async createMilestone(data: {
+    userId: string;
+    date: string;
+    title: string;
+    description: string;
+    type: string;
+  }): Promise<Milestone> {
+    const milestones = this.getFromStorage<Milestone>("milestones");
+    const milestone: Milestone = {
+      id: this.generateId(),
+      userId: data.userId,
+      date: data.date,
+      title: data.title,
+      description: data.description,
+      type: data.type,
+      createdAt: new Date(),
+    };
+    milestones.push(milestone);
+    this.saveToStorage("milestones", milestones);
+    return milestone;
+  }
+
+  async getUserMilestones(userId: string): Promise<Milestone[]> {
+    const milestones = this.getFromStorage<Milestone>("milestones");
+    return milestones
+      .filter(m => m.userId === userId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }
+
+  async deleteMilestone(id: string): Promise<void> {
+    const milestones = this.getFromStorage<Milestone>("milestones");
+    this.saveToStorage("milestones", milestones.filter(m => m.id !== id));
+  }
+
+  // Achievement operations
+  async createAchievement(data: {
+    userId: string;
+    name: string;
+    description: string;
+    unlocked?: boolean;
+  }): Promise<Achievement> {
+    const achievements = this.getFromStorage<Achievement>("achievements");
+    const achievement: Achievement = {
+      id: this.generateId(),
+      userId: data.userId,
+      name: data.name,
+      description: data.description,
+      unlocked: data.unlocked || false,
+      unlockedAt: data.unlocked ? new Date() : undefined,
+      createdAt: new Date(),
+    };
+    achievements.push(achievement);
+    this.saveToStorage("achievements", achievements);
+    return achievement;
+  }
+
+  async getUserAchievements(userId: string): Promise<Achievement[]> {
+    const achievements = this.getFromStorage<Achievement>("achievements");
+    return achievements.filter(a => a.userId === userId);
+  }
+
+  async unlockAchievement(userId: string, achievementName: string): Promise<Achievement | null> {
+    const achievements = this.getFromStorage<Achievement>("achievements");
+    const index = achievements.findIndex(a => a.userId === userId && a.name === achievementName);
+    
+    if (index === -1) return null;
+    
+    achievements[index] = {
+      ...achievements[index],
+      unlocked: true,
+      unlockedAt: new Date(),
+    };
+    this.saveToStorage("achievements", achievements);
+    return achievements[index];
+  }
+
+  // Analytics methods for Archive page
+  async getEmotionTrendData(userId: string, days: number = 7): Promise<Array<{
+    date: string;
+    happy: number;
+    calm: number;
+    anxious: number;
+    sad: number;
+  }>> {
+    const messages = this.getFromStorage<Message>("messages");
+    const userConvs = await this.getUserConversations(userId);
+    const convIds = userConvs.map(c => c.id);
+    
+    const userMessages = messages.filter(m => 
+      convIds.includes(m.conversationId) && m.sender === "user"
+    );
+    
+    const trends = [];
+    const weekDays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dayOfWeek = weekDays[date.getDay()];
+      
+      const dayMessages = userMessages.filter(m => {
+        const msgDate = new Date(m.createdAt);
+        return msgDate.toDateString() === date.toDateString();
+      });
+      
+      // Calculate emotion scores based on message sentiment
+      let happy = 50, calm = 50, anxious = 30, sad = 20;
+      
+      if (dayMessages.length > 0) {
+        const positiveCount = dayMessages.filter(m => m.emotionDetected === "positive").length;
+        const neutralCount = dayMessages.filter(m => m.emotionDetected === "neutral").length;
+        const negativeCount = dayMessages.filter(m => m.emotionDetected === "negative").length;
+        const total = dayMessages.length;
+        
+        if (total > 0) {
+          happy = Math.round((positiveCount / total) * 100);
+          calm = Math.round(((positiveCount + neutralCount) / total) * 80);
+          anxious = Math.round((negativeCount / total) * 80);
+          sad = Math.round((negativeCount / total) * 60);
+        }
+      }
+      
+      trends.push({ date: dayOfWeek, happy, calm, anxious, sad });
+    }
+    
+    return trends;
+  }
+
+  async getEmotionCalendarData(userId: string, days: number = 7): Promise<Array<{
+    date: number;
+    mood: string;
+    intensity: string;
+  }>> {
+    const messages = this.getFromStorage<Message>("messages");
+    const userConvs = await this.getUserConversations(userId);
+    const convIds = userConvs.map(c => c.id);
+    
+    const userMessages = messages.filter(m => 
+      convIds.includes(m.conversationId) && m.sender === "user"
+    );
+    
+    const calendar = [];
+    const moodEmojis = {
+      positive: "😊",
+      neutral: "😌",
+      negative: "😔",
+      anxious: "😤",
+    };
+    
+    for (let i = 0; i < days; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (days - 1 - i));
+      
+      const dayMessages = userMessages.filter(m => {
+        const msgDate = new Date(m.createdAt);
+        return msgDate.toDateString() === date.toDateString();
+      });
+      
+      let mood = "😌";
+      let intensity = "medium";
+      
+      if (dayMessages.length > 0) {
+        const positiveCount = dayMessages.filter(m => m.emotionDetected === "positive").length;
+        const negativeCount = dayMessages.filter(m => m.emotionDetected === "negative").length;
+        
+        if (positiveCount > negativeCount && positiveCount > dayMessages.length / 2) {
+          mood = moodEmojis.positive;
+          intensity = "high";
+        } else if (negativeCount > positiveCount) {
+          mood = negativeCount > dayMessages.length / 2 ? moodEmojis.negative : moodEmojis.anxious;
+          intensity = negativeCount > dayMessages.length / 2 ? "low" : "medium";
+        } else {
+          mood = moodEmojis.neutral;
+          intensity = "medium";
+        }
+      }
+      
+      calendar.push({ date: i + 1, mood, intensity });
+    }
+    
+    return calendar;
+  }
+
+  async getRelationshipData(userId: string): Promise<Array<{
+    name: string;
+    interactions: number;
+    sentiment: string;
+    color: string;
+  }>> {
+    const groupMembers = this.getFromStorage<GroupMember>("groupMembers");
+    const groupMessages = this.getFromStorage<GroupMessage>("groupMessages");
+    const users = this.getFromStorage<User>("users");
+    
+    const userGroups = groupMembers.filter(m => m.userId === userId).map(m => m.groupId);
+    
+    // Get all members from user's groups
+    const otherMembers = groupMembers.filter(m => 
+      userGroups.includes(m.groupId) && m.userId !== userId
+    );
+    
+    // Count interactions per user
+    const interactionMap = new Map<string, number>();
+    
+    for (const member of otherMembers) {
+      const memberMessages = groupMessages.filter(m => 
+        m.userId === member.userId && userGroups.includes(m.groupId)
+      );
+      interactionMap.set(member.userId, memberMessages.length);
+    }
+    
+    // Get top 4 relationships
+    const relationships = Array.from(interactionMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([uid, count], index) => {
+        const user = users.find(u => u.id === uid);
+        const colors = ["bg-success", "bg-primary", "bg-warning", "bg-secondary"];
+        
+        return {
+          name: user?.name || "用户",
+          interactions: count,
+          sentiment: count > 20 ? "positive" : count > 10 ? "neutral" : "positive",
+          color: colors[index % colors.length],
+        };
+      });
+    
+    return relationships;
+  }
+
+  // Initialize default achievements for a user
+  async initializeUserAchievements(userId: string): Promise<void> {
+    const existing = await this.getUserAchievements(userId);
+    if (existing.length > 0) return;
+    
+    const defaultAchievements = [
+      { name: "初次相遇", description: "完成第一次对话" },
+      { name: "7天陪伴", description: "连续使用7天" },
+      { name: "情感突破", description: "进行深度情感对话" },
+      { name: "社交达人", description: "参与群聊并积极互动" },
+      { name: "连续30天", description: "连续使用30天" },
+      { name: "自我探索", description: "写下10篇日记" },
+    ];
+    
+    for (const achievement of defaultAchievements) {
+      await this.createAchievement({
+        userId,
+        ...achievement,
+        unlocked: false,
+      });
+    }
+    
+    // Check and unlock "初次相遇" if user has messages
+    const conversations = await this.getUserConversations(userId);
+    if (conversations.length > 0) {
+      await this.unlockAchievement(userId, "初次相遇");
+    }
+  }
+
+  // Check and unlock achievements based on user activity
+  async checkAndUnlockAchievements(userId: string): Promise<string[]> {
+    const unlocked: string[] = [];
+    
+    // Get user data
+    const conversations = await this.getUserConversations(userId);
+    const diaries = await this.getUserDiaryEntries(userId);
+    const groups = await this.getUserGroups(userId);
+    
+    // Check "初次相遇"
+    if (conversations.length > 0) {
+      const result = await this.unlockAchievement(userId, "初次相遇");
+      if (result) unlocked.push("初次相遇");
+    }
+    
+    // Check "7天陪伴"
+    const sortedConvs = conversations
+      .filter(c => c.lastActivityAt)
+      .sort((a, b) => new Date(b.lastActivityAt!).getTime() - new Date(a.lastActivityAt!).getTime());
+    
+    if (sortedConvs.length >= 7) {
+      const result = await this.unlockAchievement(userId, "7天陪伴");
+      if (result) unlocked.push("7天陪伴");
+    }
+    
+    // Check "自我探索"
+    if (diaries.length >= 10) {
+      const result = await this.unlockAchievement(userId, "自我探索");
+      if (result) unlocked.push("自我探索");
+    }
+    
+    // Check "社交达人"
+    if (groups.length > 0) {
+      const groupMessages = this.getFromStorage<GroupMessage>("groupMessages");
+      const userGroupMessages = groupMessages.filter(m => m.userId === userId);
+      if (userGroupMessages.length >= 20) {
+        const result = await this.unlockAchievement(userId, "社交达人");
+        if (result) unlocked.push("社交达人");
+      }
+    }
+    
+    return unlocked;
+  }
+
   // Clear all data (for testing/reset)
   async clearAll(): Promise<void> {
     localStorage.removeItem("users");
@@ -569,6 +892,8 @@ class DatabaseService {
     localStorage.removeItem("groupMessages");
     localStorage.removeItem("userSettings");
     localStorage.removeItem("diaryEntries");
+    localStorage.removeItem("milestones");
+    localStorage.removeItem("achievements");
     localStorage.removeItem("currentUserId");
     localStorage.removeItem("currentConversationId");
   }
