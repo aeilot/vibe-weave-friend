@@ -102,6 +102,7 @@ model Group {
   updatedAt       DateTime @updatedAt
   
   members         GroupMember[]
+  aiMembers       AIGroupMember[]
   messages        GroupMessage[]
   
   @@index([creatorId])
@@ -124,14 +125,35 @@ model GroupMember {
 }
 
 model GroupMessage {
-  id        String   @id @default(uuid())
-  groupId   String
-  userId    String
-  content   String   @db.Text
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  groupId    String
+  userId     String?
+  aiMemberId String?
+  content    String   @db.Text
+  senderType String   @default("user") // "user" or "ai"
+  createdAt  DateTime @default(now())
   
-  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group      Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  aiMember   AIGroupMember? @relation(fields: [aiMemberId], references: [id], onDelete: SetNull)
   
   @@index([groupId])
   @@index([createdAt])
+  @@index([senderType])
+}
+
+model AIGroupMember {
+  id           String   @id @default(uuid())
+  groupId      String
+  name         String
+  role         String   // "moderator", "guide", "entertainer"
+  personality  String?  @db.Text
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  group        Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  messages     GroupMessage[]
+  
+  @@index([groupId])
+  @@index([role])
 }

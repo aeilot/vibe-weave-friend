@@ -70,9 +70,22 @@ export interface GroupMember {
 export interface GroupMessage {
   id: string;
   groupId: string;
-  userId: string;
+  userId?: string;
+  aiMemberId?: string;
   content: string;
+  senderType: string; // "user" or "ai"
   createdAt: Date;
+}
+
+export interface AIGroupMember {
+  id: string;
+  groupId: string;
+  name: string;
+  role: string; // "moderator", "guide", "entertainer"
+  personality?: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface UserSettings {
@@ -426,15 +439,19 @@ class DatabaseService {
   // Group Message operations
   async createGroupMessage(data: {
     groupId: string;
-    userId: string;
+    userId?: string;
+    aiMemberId?: string;
     content: string;
+    senderType?: string;
   }): Promise<GroupMessage> {
     const groupMessages = this.getFromStorage<GroupMessage>("groupMessages");
     const message: GroupMessage = {
       id: this.generateId(),
       groupId: data.groupId,
       userId: data.userId,
+      aiMemberId: data.aiMemberId,
       content: data.content,
+      senderType: data.senderType || "user",
       createdAt: new Date(),
     };
     groupMessages.push(message);
@@ -453,6 +470,58 @@ class DatabaseService {
     return groupMessages
       .filter(m => m.groupId === groupId)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
+  // AI Group Member operations
+  async createAIGroupMember(data: {
+    groupId: string;
+    name: string;
+    role: string;
+    personality?: string;
+  }): Promise<AIGroupMember> {
+    const aiMembers = this.getFromStorage<AIGroupMember>("aiGroupMembers");
+    const member: AIGroupMember = {
+      id: this.generateId(),
+      groupId: data.groupId,
+      name: data.name,
+      role: data.role,
+      personality: data.personality,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    aiMembers.push(member);
+    this.saveToStorage("aiGroupMembers", aiMembers);
+    return member;
+  }
+
+  async getGroupAIMembers(groupId: string): Promise<AIGroupMember[]> {
+    const aiMembers = this.getFromStorage<AIGroupMember>("aiGroupMembers");
+    return aiMembers.filter(m => m.groupId === groupId);
+  }
+
+  async getAIGroupMember(id: string): Promise<AIGroupMember | null> {
+    const aiMembers = this.getFromStorage<AIGroupMember>("aiGroupMembers");
+    return aiMembers.find(m => m.id === id) || null;
+  }
+
+  async updateAIGroupMember(id: string, updates: Partial<AIGroupMember>): Promise<AIGroupMember | null> {
+    const aiMembers = this.getFromStorage<AIGroupMember>("aiGroupMembers");
+    const index = aiMembers.findIndex(m => m.id === id);
+    if (index === -1) return null;
+    
+    aiMembers[index] = {
+      ...aiMembers[index],
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.saveToStorage("aiGroupMembers", aiMembers);
+    return aiMembers[index];
+  }
+
+  async removeAIGroupMember(id: string): Promise<void> {
+    const aiMembers = this.getFromStorage<AIGroupMember>("aiGroupMembers");
+    this.saveToStorage("aiGroupMembers", aiMembers.filter(m => m.id !== id));
   }
 
   // UserSettings operations
