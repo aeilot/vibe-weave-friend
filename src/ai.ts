@@ -924,6 +924,87 @@ export async function generateGroupChatResponse(
 }
 
 /**
+ * Generate AI response for a specific AI member with custom personality
+ */
+export async function generateAIMemberResponse(
+  userMessage: string,
+  groupHistory: Array<{ sender: string; content: string; senderType?: string }>,
+  aiMember: {
+    name: string;
+    role: string;
+    personality?: string;
+  },
+  apiConfig?: ApiConfig,
+  adminConfig?: AdminConfig
+): Promise<string> {
+  // Role-specific default personalities (fallback if no custom personality)
+  const rolePersonalities: Record<string, string> = {
+    moderator: `你是一个群聊调解员，名叫${aiMember.name}。你的角色是：
+- 帮助化解矛盾，维护群聊和谐
+- 引导大家进行理性、建设性的讨论
+- 在气氛紧张时提醒大家保持冷静
+- 确保每个人的观点都被听到和尊重
+用中文回复，语气专业但友好，保持中立立场。`,
+    
+    guide: `你是一个话题引导者，名叫${aiMember.name}。你的角色是：
+- 引导有趣的话题，激发讨论
+- 提出深刻的问题让大家思考
+- 分享相关的知识和观点
+- 保持对话的活跃和有意义
+用中文回复，语气热情且富有洞察力。`,
+    
+    entertainer: `你是一个气氛活跃者，名叫${aiMember.name}。你的角色是：
+- 活跃气氛，增添趣味
+- 适时加入幽默和轻松的元素
+- 让群聊更加有趣和愉快
+- 用积极的态度影响大家
+用中文回复，语气活泼有趣，适度使用表情符号。`,
+  };
+
+  // Use custom personality if provided, otherwise use role-based default
+  const personality = aiMember.personality || rolePersonalities[aiMember.role] || rolePersonalities.guide;
+
+  // Default responses by role
+  const defaultResponses: Record<string, string> = {
+    moderator: `大家好，我是${aiMember.name}。让我们保持理性讨论，互相尊重。`,
+    guide: `嗨！我是${aiMember.name}，让我们聊些有趣的话题吧！`,
+    entertainer: `哈喽～我是${aiMember.name}，来给大家带来欢乐啦！😄`,
+  };
+
+  // Load API config
+  const config = apiConfig || JSON.parse(localStorage.getItem("userApiConfig") || "null");
+  
+  if (!config) {
+    return defaultResponses[aiMember.role] || `你好，我是${aiMember.name}！`;
+  }
+
+  try {
+    // Build group chat history with sender types
+    let historyText = "";
+    for (const msg of groupHistory.slice(-10)) {
+      const senderLabel = msg.senderType === "ai" ? `[AI] ${msg.sender}` : msg.sender;
+      historyText += `${senderLabel}: ${msg.content}\n`;
+    }
+
+    const messages: Message[] = [
+      { role: "system", content: personality },
+      { role: "user", content: `群聊历史:\n${historyText}\n\n最新消息: ${userMessage}\n\n请以${aiMember.name}的身份回应。记住你的角色是${aiMember.role}。` },
+    ];
+
+    const result = await callLLM(messages, apiConfig, adminConfig);
+    
+    if (typeof result === "string") {
+      return result;
+    }
+    
+    return defaultResponses[aiMember.role] || `你好，我是${aiMember.name}！`;
+  } catch (error) {
+    console.error("Failed to generate AI member response:", error);
+    return defaultResponses[aiMember.role] || `你好，我是${aiMember.name}！`;
+  }
+}
+
+/**
  * Generate group topic suggestions
  */
 export async function generateGroupTopicSuggestions(

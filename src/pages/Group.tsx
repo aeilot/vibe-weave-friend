@@ -114,6 +114,14 @@ const Group = () => {
         });
       }
 
+      // Add a default AI assistant to the group
+      await db.createAIGroupMember({
+        groupId: group.id,
+        name: "Soul",
+        role: "guide",
+        personality: "一个友好的话题引导者，帮助大家开启有趣的讨论。",
+      });
+
       // Reload groups
       const groups = await db.getUserGroups(user!.id);
       setUserGroups(groups);
@@ -123,7 +131,7 @@ const Group = () => {
       setIsDialogOpen(false);
       toast({
         title: "群聊已创建",
-        description: `"${newGroupName}" 创建成功！`,
+        description: `"${newGroupName}" 创建成功！默认 AI 助手 Soul 已加入。`,
       });
     }
   };
