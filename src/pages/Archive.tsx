@@ -884,35 +884,51 @@ const Archive = () => {
               {/* 成长时间轴 */}
               <div className="space-y-4">
                 <h3 className="font-semibold">成长时间轴</h3>
-                {milestones.map((milestone, index) => {
-                  const MilestoneIcon = getMilestoneIcon(milestone.type);
-                  return (
-                    <div key={milestone.id} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-soft">
-                          <MilestoneIcon className="w-5 h-5 text-white" />
-                        </div>
-                        {index < milestones.length - 1 && (
-                          <div className="w-0.5 flex-1 bg-gradient-to-b from-primary to-transparent mt-2" />
-                        )}
+                {milestones.length === 0 ? (
+                  <Card className="p-8 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                        <Star className="w-8 h-8 text-muted-foreground" />
                       </div>
-                      <Card className="flex-1 p-4 mb-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold">{milestone.title}</h4>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(milestone.date).toLocaleDateString("zh-CN", {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {milestone.description}
-                        </p>
-                      </Card>
+                      <p className="text-muted-foreground">
+                        还没有里程碑记录
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        随着你的使用，这里会记录你的成长时刻
+                      </p>
                     </div>
-                  );
-                })}
+                  </Card>
+                ) : (
+                  milestones.map((milestone, index) => {
+                    const MilestoneIcon = getMilestoneIcon(milestone.type);
+                    return (
+                      <div key={milestone.id} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-soft">
+                            <MilestoneIcon className="w-5 h-5 text-white" />
+                          </div>
+                          {index < milestones.length - 1 && (
+                            <div className="w-0.5 flex-1 bg-gradient-to-b from-primary to-transparent mt-2" />
+                          )}
+                        </div>
+                        <Card className="flex-1 p-4 mb-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold">{milestone.title}</h4>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(milestone.date).toLocaleDateString("zh-CN", {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {milestone.description}
+                          </p>
+                        </Card>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               {/* 成就系统 */}

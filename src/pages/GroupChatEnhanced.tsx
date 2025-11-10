@@ -108,6 +108,9 @@ const GroupChatEnhanced = () => {
   const [newAIName, setNewAIName] = useState("");
   const [newAIRole, setNewAIRole] = useState("guide");
   const [newAIPersonality, setNewAIPersonality] = useState("");
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [editedGroupName, setEditedGroupName] = useState("");
+  const [newMemberUserId, setNewMemberUserId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -239,6 +242,55 @@ const GroupChatEnhanced = () => {
       toast({
         title: "移除失败",
         description: "无法移除 AI 成员",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateGroupName = async () => {
+    if (!id || !editedGroupName.trim()) return;
+
+    try {
+      await db.updateGroup(id, { name: editedGroupName });
+      setGroup({ ...group, name: editedGroupName });
+      setShowSettingsDialog(false);
+      
+      toast({
+        title: "群聊名称已更新",
+        description: `群聊名称已更改为 "${editedGroupName}"`,
+      });
+    } catch (error) {
+      console.error("Failed to update group name:", error);
+      toast({
+        title: "更新失败",
+        description: "无法更新群聊名称",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddMemberToGroup = async () => {
+    if (!id || !newMemberUserId.trim()) return;
+
+    try {
+      // In a real implementation, you'd validate the user ID first
+      await db.addGroupMember({
+        groupId: id,
+        userId: newMemberUserId,
+        role: "member",
+      });
+      
+      setNewMemberUserId("");
+      
+      toast({
+        title: "成员已添加",
+        description: "新成员已加入群聊",
+      });
+    } catch (error) {
+      console.error("Failed to add member:", error);
+      toast({
+        title: "添加失败",
+        description: error instanceof Error ? error.message : "无法添加成员",
         variant: "destructive",
       });
     }
@@ -516,9 +568,83 @@ const GroupChatEnhanced = () => {
               </SheetContent>
             </Sheet>
 
-            <Button variant="ghost" size="icon" className="rounded-xl">
-              <Settings className="w-5 h-5" />
-            </Button>
+            <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+              <DialogTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="rounded-xl"
+                  onClick={() => {
+                    setEditedGroupName(group?.name || "");
+                    setShowSettingsDialog(true);
+                  }}
+                >
+                  <Settings className="w-5 h-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>群聊设置</DialogTitle>
+                  <DialogDescription>
+                    管理群聊名称和成员
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-6 py-4">
+                  {/* Group Name Section */}
+                  <div className="space-y-3">
+                    <Label htmlFor="group-name">群聊名称</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="group-name"
+                        placeholder="输入新的群聊名称"
+                        value={editedGroupName}
+                        onChange={(e) => setEditedGroupName(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={handleUpdateGroupName}
+                        disabled={!editedGroupName.trim() || editedGroupName === group?.name}
+                      >
+                        更新
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Add Member Section */}
+                  <div className="space-y-3">
+                    <Label htmlFor="member-id">添加成员</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="member-id"
+                        placeholder="输入用户 ID 或邮箱"
+                        value={newMemberUserId}
+                        onChange={(e) => setNewMemberUserId(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={handleAddMemberToGroup}
+                        disabled={!newMemberUserId.trim()}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        添加
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      暂时需要手动输入用户 ID，未来版本将支持用户搜索
+                    </p>
+                  </div>
+
+                  {/* Group Info */}
+                  <div className="space-y-2 pt-4 border-t">
+                    <h4 className="text-sm font-semibold">群聊信息</h4>
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      <p>创建时间: {group?.createdAt ? new Date(group.createdAt).toLocaleDateString("zh-CN") : "未知"}</p>
+                      <p>AI 成员: {aiMembers.length} 个</p>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </header>
@@ -639,12 +765,21 @@ const GroupChatEnhanced = () => {
                   <Smile className="w-5 h-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem>😊 表情</DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Paperclip className="w-4 h-4 mr-2" />
-                  文件
-                </DropdownMenuItem>
+              <DropdownMenuContent className="w-64">
+                <div className="grid grid-cols-8 gap-1 p-2">
+                  {["😊", "😂", "🥰", "😍", "🤔", "👍", "👏", "🎉", 
+                    "❤️", "💯", "🔥", "✨", "🌟", "💪", "🙏", "😎",
+                    "😢", "😭", "😱", "😅", "🤗", "🤝", "👋", "💡",
+                    "📚", "🎯", "🚀", "⭐", "🌈", "🎨", "🎵", "☕"].map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => setInputValue(inputValue + emoji)}
+                      className="text-2xl hover:bg-accent rounded p-1 transition-colors"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
 
